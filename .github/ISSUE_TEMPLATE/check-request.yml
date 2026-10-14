@@ -1,0 +1,17 @@
+name: New or improved check
+description: Suggest a DBIM requirement the validator should test (or test better).
+labels: ["enhancement"]
+body:
+  - type: input
+    id: section
+    attributes:
+      label: DBIM section / Annexure F item
+      placeholder: "§4.3, F.1 #12"
+    validations:
+      required: true
+  - type: textarea
+    id: rule
+    attributes:
+      label: What should be checked, and how could it be measured?
+    validations:
+      required: true

@@ -1,0 +1,16 @@
+name: Bug report
+description: The app or CLI crashed, hung or behaved unexpectedly.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the URL scanned, the error message and the relevant worker log lines.
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: macOS 15, Node 22, web app / CLI

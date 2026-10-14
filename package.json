@@ -1,25 +1,74 @@
 {
-  "name": "dbim_validator",
+  "name": "dbim-validator",
   "version": "0.1.0",
   "private": true,
+  "description": "Open-source validator that checks Government of India websites against the Digital Brand Identity Manual (DBIM) v3.0 and its Annexure F compliance checklists.",
+  "keywords": [
+    "dbim",
+    "dbim-validator",
+    "digital-brand-identity-manual",
+    "government-of-india",
+    "gov-in",
+    "meity",
+    "nic",
+    "gigw",
+    "website-audit",
+    "compliance",
+    "accessibility",
+    "wcag",
+    "lighthouse",
+    "playwright",
+    "nextjs"
+  ],
+  "homepage": "https://github.com/tejash-jl/dbim-validator#readme",
+  "bugs": {
+    "url": "https://github.com/tejash-jl/dbim-validator/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tejash-jl/dbim-validator.git"
+  },
+  "license": "MIT",
+  "author": "Tejash JL (https://github.com/tejash-jl)",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "concurrently -k -n web,worker -c blue,magenta \"next dev --turbopack\" \"tsx watch scripts/worker.ts\"",
     "build": "next build --turbopack",
-    "start": "next start",
-    "lint": "eslint"
+    "start": "concurrently -k -n web,worker -c blue,magenta \"next start\" \"tsx scripts/worker.ts\"",
+    "worker": "tsx scripts/worker.ts",
+    "scan": "tsx scripts/scan.ts",
+    "test": "vitest run",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "docs:checks": "tsx scripts/gen-checks-doc.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "@axe-core/playwright": "^4.10.2",
+    "@next/env": "15.5.4",
+    "better-sqlite3": "^12.4.1",
+    "chrome-launcher": "^1.2.1",
+    "lighthouse": "^12.8.2",
+    "next": "15.5.4",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.55.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.4"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
-    "@eslint/eslintrc": "^3"
+    "tsx": "^4.20.6",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

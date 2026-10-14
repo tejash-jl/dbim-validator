@@ -1,0 +1,35 @@
+name: Wrong result (false positive / negative)
+description: A check passed or failed when it shouldn't have.
+labels: ["false-positive"]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: Website URL
+      placeholder: https://www.example.gov.in
+    validations:
+      required: true
+  - type: input
+    id: check
+    attributes:
+      label: Check
+      description: The check title or ID, e.g. "Footer has the mandatory elements" or footer.elements
+    validations:
+      required: true
+  - type: dropdown
+    id: org
+    attributes:
+      label: Organization type selected
+      options:
+        - Central Ministry / Department
+        - Government organization allowed to use the State Emblem
+        - Government organization not allowed to use the State Emblem
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What the validator reported, and what the page actually does
+      description: Screenshots or the relevant evidence lines from the report help a lot.
+    validations:
+      required: true
