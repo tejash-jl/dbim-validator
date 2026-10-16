@@ -31,6 +31,12 @@ function site(pages: PageData[], orgType = DEFAULT_OPTIONS.orgType): SiteData {
 const byId = (r: ReturnType<typeof evaluate>, id: string) => r.results.find((x) => x.id === id)!;
 
 describe("rules engine", () => {
+  it("does not fail HTTPS for a site running on localhost", () => {
+    const p = page({ url: "http://localhost:3000/", finalUrl: "http://localhost:3000/", links: [{ text: "About", href: "http://localhost:3000/about" }] as PageData["links"] });
+    const r = evaluate(site([p]), { durationMs: 1, notes: [] });
+    expect(byId(r, "content.https").status).toBe("na");
+  });
+
   it("does not let pale tints decide or split the colour group", () => {
     const base = page();
     const p = page({ desktop: { ...base.desktop, colors: [...base.desktop.colors, { color: "#FAEBF2", weight: 0.4, prop: "bg" }] } });

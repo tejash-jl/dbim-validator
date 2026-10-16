@@ -1,26 +1,46 @@
-import { chromium } from "playwright";
 import { evaluate } from "../dbim/engine";
 import type { PageData, ScanOptions, ScanReport, SiteData } from "../dbim/types";
 import { runAiChecks } from "./ai";
+import { launchBrowser } from "./browser";
 import { collectPage } from "./collect";
 import { pickPages } from "./crawl";
 import { runLighthouse } from "./lighthouse";
 import { checkLinks, checkPdfs } from "./links";
-import { validateScanUrl } from "./safety";
+import { isLocalHost, validateScanUrl } from "./safety";
 
 export type Progress = (step: string, pct: number) => void;
 
 const PAGE_CONCURRENCY = Math.max(1, Number(process.env.PAGE_CONCURRENCY || 3));
 
+/** Turn browser navigation errors into something a person can act on. */
+export function explainLoadError(e: Error, url: URL): string {
+  const m = e.message;
+  const local = isLocalHost(url.hostname);
+  if (/ERR_CONNECTION_REFUSED/.test(m))
+    return local ? `Nothing is running at ${url.host}. Start your site's dev server, or check the port.` : `${url.host} refused the connection.`;
+  if (/ERR_NAME_NOT_RESOLVED/.test(m)) return `${url.hostname} could not be found. Check the address.`;
+  if (/Timeout|ERR_TIMED_OUT|ERR_CONNECTION_TIMED_OUT/.test(m))
+    return `${url.host} did not respond within 60 seconds. The site may be down, very slow, or reachable only from certain networks.`;
+  if (/ERR_CERT|SSL/.test(m)) return `${url.host} has a TLS certificate problem: ${m.split("\n")[0]}`;
+  return m.split("\n")[0];
+}
+
 export async function runScan(rawUrl: string, options: ScanOptions, outDir: string, progress: Progress = () => {}): Promise<{ report: ScanReport; site: SiteData }> {
   const started = Date.now();
   const notes: string[] = [];
-  const url = await validateScanUrl(rawUrl);
-  const browser = await chromium.launch({ channel: "chromium", args: ["--disable-dev-shm-usage"] });
+  const allowPrivate = options.allowPrivate ?? false;
+  const url = await validateScanUrl(rawUrl, allowPrivate);
+  const launched = await launchBrowser({ headed: options.headed });
+  const { browser, userAgents } = launched;
+  if (launched.fallbackNote) notes.push(launched.fallbackNote);
+  if (isLocalHost(url.hostname))
+    notes.push("This is a local or private-network site. HTTPS, caching, compression and performance results reflect this server, which may differ from production.");
   const pages: PageData[] = [];
   try {
     progress("Loading homepage", 5);
-    const home = await collectPage(browser, url.href, { outDir, index: 0, isHome: true, runSearch: true });
+    const home = await collectPage(browser, url.href, { outDir, index: 0, isHome: true, runSearch: true, allowPrivate, userAgents }).catch((e) => {
+      throw new Error(explainLoadError(e as Error, url));
+    });
     if (home.status >= 400 || home.status === 0) throw new Error(`Homepage returned HTTP ${home.status || "no response"}`);
     pages.push(home);
 
@@ -32,7 +52,7 @@ export async function runScan(rawUrl: string, options: ScanOptions, outDir: stri
       while (next < extra.length) {
         const i = next++;
         try {
-          const p = await collectPage(browser, extra[i], { outDir, index: i + 1, isHome: false, runSearch: false });
+          const p = await collectPage(browser, extra[i], { outDir, index: i + 1, isHome: false, runSearch: false, allowPrivate, userAgents });
           if (p.status > 0 && p.status < 400) collected[i] = p;
           else notes.push(`Skipped ${extra[i]} (HTTP ${p.status})`);
         } catch (e) {
@@ -46,16 +66,17 @@ export async function runScan(rawUrl: string, options: ScanOptions, outDir: stri
     await Promise.all(Array.from({ length: Math.min(PAGE_CONCURRENCY, extra.length) }, worker));
     pages.push(...collected.filter((p): p is PageData => p !== null));
   } finally {
-    await browser.close().catch(() => {});
+    // A browser that is updating itself can take minutes to exit; don't let that hold up the report.
+    await Promise.race([browser.close().catch(() => {}), new Promise((r) => setTimeout(r, 10_000))]);
   }
 
   const site: SiteData = { startUrl: url.href, options, pages, lighthouse: null, links: null, pdfs: null, ai: null };
 
   const tasks: Promise<void>[] = [];
   if (options.checkLinks)
-    tasks.push(checkLinks(pages).then((r) => void (site.links = r)).catch((e) => void notes.push(`Link check failed: ${e.message}`)));
+    tasks.push(checkLinks(pages, allowPrivate).then((r) => void (site.links = r)).catch((e) => void notes.push(`Link check failed: ${e.message}`)));
   if (options.checkPdfs)
-    tasks.push(checkPdfs(pages).then((r) => void (site.pdfs = r)).catch((e) => void notes.push(`PDF check failed: ${e.message}`)));
+    tasks.push(checkPdfs(pages, allowPrivate).then((r) => void (site.pdfs = r)).catch((e) => void notes.push(`PDF check failed: ${e.message}`)));
   if (options.ai)
     tasks.push(
       runAiChecks(pages[0], options.orgType)
@@ -73,7 +94,7 @@ export async function runScan(rawUrl: string, options: ScanOptions, outDir: stri
   if (options.lighthouse) {
     progress("Running Lighthouse", 80);
     try {
-      site.lighthouse = await runLighthouse(pages[0].finalUrl);
+      site.lighthouse = await runLighthouse(pages[0].finalUrl, { browser: launched.choice, allowPrivate });
     } catch (e) {
       site.lighthouseError = (e as Error).message.split("\n")[0].slice(0, 200);
     }
@@ -81,6 +102,6 @@ export async function runScan(rawUrl: string, options: ScanOptions, outDir: stri
 
   progress("Evaluating rules", 95);
   for (const p of pages) for (const err of p.errors) notes.push(`${p.finalUrl}: ${err}`);
-  const report = evaluate(site, { durationMs: Date.now() - started, notes });
+  const report = evaluate(site, { durationMs: Date.now() - started, notes, browser: launched.label });
   return { report, site };
 }

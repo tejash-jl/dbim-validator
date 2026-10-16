@@ -30,7 +30,7 @@ export function fmtDate(iso: string) {
 export function hostOf(u: string) {
   try {
     const x = new URL(u);
-    return x.hostname.startsWith("xn--") || x.hostname.includes(".xn--") ? x.hostname : x.hostname + (x.pathname === "/" ? "" : x.pathname);
+    return x.hostname.startsWith("xn--") || x.hostname.includes(".xn--") ? x.hostname : x.host + (x.pathname === "/" ? "" : x.pathname);
   } catch {
     return u;
   }

@@ -55,7 +55,7 @@ function scoreOf(results: CheckResult[]) {
   return den ? Math.round((num / den) * 100) : 0;
 }
 
-export function evaluate(site: SiteData, meta: { durationMs: number; notes: string[] }): ScanReport {
+export function evaluate(site: SiteData, meta: { durationMs: number; notes: string[]; browser?: string }): ScanReport {
   const home = site.pages[0];
   const ctx: RuleContext = { site, home, orgType: site.options.orgType, colourGroup: detectColourGroup(site) };
   const results: CheckResult[] = [];
@@ -94,6 +94,7 @@ export function evaluate(site: SiteData, meta: { durationMs: number; notes: stri
     options: site.options,
     scannedAt: new Date().toISOString(),
     durationMs: meta.durationMs,
+    browser: meta.browser,
     pages: site.pages.map((p) => ({ url: p.finalUrl, status: p.status, title: p.title, screenshotDesktop: p.screenshotDesktop, screenshotMobile: p.screenshotMobile })),
     colourGroup: ctx.colourGroup,
     score: scoreOf(results),

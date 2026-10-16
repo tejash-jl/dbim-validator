@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ORG_TYPES, type OrgType } from "@/lib/dbim/spec";
+import type { ServerCaps } from "./Home";
 
-export default function ScanForm({ onQueued }: { onQueued?: () => void }) {
+const BROWSER_LABEL = { chrome: "Google Chrome", msedge: "Microsoft Edge", chromium: "Chromium" } as const;
+
+export default function ScanForm({ caps, onQueued }: { caps: ServerCaps; onQueued?: () => void }) {
   const router = useRouter();
   const [urls, setUrls] = useState("");
   const [orgType, setOrgType] = useState<OrgType>("ministry");
@@ -13,6 +16,7 @@ export default function ScanForm({ onQueued }: { onQueued?: () => void }) {
   const [checkLinks, setCheckLinks] = useState(true);
   const [checkPdfs, setCheckPdfs] = useState(true);
   const [ai, setAi] = useState(true);
+  const [headed, setHeaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -30,7 +34,7 @@ export default function ScanForm({ onQueued }: { onQueued?: () => void }) {
       const res = await fetch("/api/scans", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ urls: list, orgType, maxPages, lighthouse, checkLinks, checkPdfs, ai }),
+        body: JSON.stringify({ urls: list, orgType, maxPages, lighthouse, checkLinks, checkPdfs, ai, headed }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not start the scan");
@@ -56,8 +60,11 @@ export default function ScanForm({ onQueued }: { onQueued?: () => void }) {
       </p>
       <div>
         <label className="field-label" htmlFor="urls">Website URL(s) *</label>
-        <textarea id="urls" required value={urls} onChange={(e) => { setUrls(e.target.value); setError(null); }} placeholder={"https://www.meity.gov.in\nhttps://www.example.gov.in"} spellCheck={false} />
-        <div className="hint">One URL per line, up to 20. Each URL is scanned separately.</div>
+        <textarea id="urls" required value={urls} onChange={(e) => { setUrls(e.target.value); setError(null); }} placeholder={caps.localUrls ? "https://www.meity.gov.in\nlocalhost:3000" : "https://www.meity.gov.in\nhttps://www.example.gov.in"} spellCheck={false} />
+        <div className="hint">
+          One URL per line, up to 20. Each URL is scanned separately.
+          {caps.localUrls && " Sites running on your machine or local network (localhost, 127.0.0.1, 192.168.x.x) can be scanned too."}
+        </div>
       </div>
 
       <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
@@ -86,8 +93,11 @@ export default function ScanForm({ onQueued }: { onQueued?: () => void }) {
           <label className="check"><input type="checkbox" checked={checkLinks} onChange={(e) => setCheckLinks(e.target.checked)} /> Check links</label>
           <label className="check"><input type="checkbox" checked={checkPdfs} onChange={(e) => setCheckPdfs(e.target.checked)} /> Check PDFs</label>
           <label className="check"><input type="checkbox" checked={ai} onChange={(e) => setAi(e.target.checked)} /> AI visual &amp; content review</label>
+          {caps.headed && (
+            <label className="check"><input type="checkbox" checked={headed} onChange={(e) => setHeaded(e.target.checked)} /> Show the browser while scanning</label>
+          )}
         </div>
-        <div className="hint">The homepage plus up to {maxPages - 1} inner page(s) from the navigation and footer are scanned at desktop (1440px) and mobile (390px) widths.</div>
+        <div className="hint">The homepage plus up to {maxPages - 1} inner page(s) from the navigation and footer are scanned in {BROWSER_LABEL[caps.browser]} at desktop (1440px) and mobile (390px) widths.</div>
       </details>
 
       <div className="actions">

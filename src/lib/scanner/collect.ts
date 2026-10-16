@@ -9,11 +9,6 @@ const INPAGE_SOURCE = fs.readFileSync(path.join(process.cwd(), "src/lib/scanner/
 
 const DESKTOP = { width: 1440, height: 900 };
 const MOBILE = { width: 390, height: 844 };
-const UA_DESKTOP =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 DBIM-Validator/1.0";
-const UA_MOBILE =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1 DBIM-Validator/1.0";
-
 // Records LCP/CLS from document start so the values reflect page load, not our later scrolling.
 const PERF_INIT = `(() => {
   const s = (window.__dbimPerfState = { lcp: null, cls: 0 });
@@ -23,12 +18,12 @@ const PERF_INIT = `(() => {
 
 const TRACKING_COOKIE = /^(_ga|_gid|_gat|_gcl|_fbp|_fbc|_hj|__utm|_clck|_clsk|IDE$|NID$|_uetsid|_uetvid|__gads|_pin_|mp_|ajs_)/i;
 
-async function guardedContext(browser: Browser, opts: Parameters<Browser["newContext"]>[0]): Promise<BrowserContext> {
+async function guardedContext(browser: Browser, allowPrivate: boolean, opts: Parameters<Browser["newContext"]>[0]): Promise<BrowserContext> {
   const ctx = await browser.newContext({ ignoreHTTPSErrors: true, ...opts });
   await ctx.route("**/*", async (route) => {
     const u = new URL(route.request().url());
     if (!/^(https?|data|blob):$/.test(u.protocol)) return route.continue();
-    if (u.protocol.startsWith("http") && !(await isHostAllowed(u.hostname))) return route.abort("blockedbyclient");
+    if (u.protocol.startsWith("http") && !(await isHostAllowed(u.hostname, allowPrivate))) return route.abort("blockedbyclient");
     return route.continue();
   });
   return ctx;
@@ -191,7 +186,14 @@ async function runAxe(page: Page): Promise<AxeViolation[] | null> {
   }
 }
 
-export type CollectOptions = { outDir: string; index: number; isHome: boolean; runSearch: boolean };
+export type CollectOptions = {
+  outDir: string;
+  index: number;
+  isHome: boolean;
+  runSearch: boolean;
+  allowPrivate: boolean;
+  userAgents: { desktop: string; mobile: string };
+};
 
 export async function collectPage(browser: Browser, url: string, opts: CollectOptions): Promise<PageData> {
   const errors: string[] = [];
@@ -200,7 +202,7 @@ export async function collectPage(browser: Browser, url: string, opts: CollectOp
   const prefix = path.join(opts.outDir, `p${opts.index}`);
   fs.mkdirSync(opts.outDir, { recursive: true });
 
-  const ctx = await guardedContext(browser, { viewport: DESKTOP, userAgent: UA_DESKTOP, locale: "en-IN" });
+  const ctx = await guardedContext(browser, opts.allowPrivate, { viewport: DESKTOP, userAgent: opts.userAgents.desktop, locale: "en-IN" });
   await ctx.addInitScript(PERF_INIT);
   try {
     const page = await ctx.newPage();
@@ -255,7 +257,7 @@ export async function collectPage(browser: Browser, url: string, opts: CollectOp
     // ----- Mobile pass -----
     let mobile: ViewportData | null = null;
     let screenshotMobile: string | undefined;
-    const mctx = await guardedContext(browser, { viewport: MOBILE, userAgent: UA_MOBILE, isMobile: true, hasTouch: true, locale: "en-IN" });
+    const mctx = await guardedContext(browser, opts.allowPrivate, { viewport: MOBILE, userAgent: opts.userAgents.mobile, isMobile: true, hasTouch: true, locale: "en-IN" });
     try {
       const mpage = await mctx.newPage();
       await mpage.goto(finalUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });

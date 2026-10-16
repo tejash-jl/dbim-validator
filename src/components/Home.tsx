@@ -4,7 +4,9 @@ import { useState } from "react";
 import ScanForm from "./ScanForm";
 import RecentScans from "./RecentScans";
 
-export default function Home() {
+export type ServerCaps = { localUrls: boolean; headed: boolean; browser: "chrome" | "msedge" | "chromium" };
+
+export default function Home({ caps }: { caps: ServerCaps }) {
   const [refreshKey, setRefreshKey] = useState(0);
   return (
     <>
@@ -15,7 +17,7 @@ export default function Home() {
             Checks colours, typography, icons, logo lockup, header and footer, imagery, content, search, performance and accessibility
             against DBIM v3.0 and its Annexure F compliance checklists — with evidence and fixes for every item.
           </p>
-          <ScanForm onQueued={() => setRefreshKey((k) => k + 1)} />
+          <ScanForm caps={caps} onQueued={() => setRefreshKey((k) => k + 1)} />
         </div>
       </section>
       <section className="container section">

@@ -19,16 +19,17 @@ async function pool<T, R>(items: T[], size: number, fn: (t: T) => Promise<R>): P
   return out;
 }
 
-async function safeFetch(url: string, init: RequestInit & { timeoutMs?: number }, hops = 5): Promise<Response> {
+async function safeFetch(url: string, opts: RequestInit & { timeoutMs?: number; allowPrivate?: boolean }, hops = 5): Promise<Response> {
+  const { timeoutMs, allowPrivate, ...init } = opts;
   let current = url;
   for (let h = 0; h <= hops; h++) {
     const u = new URL(current);
-    if (!(await isHostAllowed(u.hostname))) throw new Error("blocked: private address");
+    if (!(await isHostAllowed(u.hostname, allowPrivate))) throw new Error("blocked: private address");
     const res = await fetch(current, {
       ...init,
       redirect: "manual",
       headers: { "user-agent": UA, accept: "*/*", ...(init.headers || {}) },
-      signal: AbortSignal.timeout(init.timeoutMs ?? 15_000),
+      signal: AbortSignal.timeout(timeoutMs ?? 15_000),
     });
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
       current = new URL(res.headers.get("location")!, current).href;
@@ -40,7 +41,7 @@ async function safeFetch(url: string, init: RequestInit & { timeoutMs?: number }
 }
 
 /** §7.1.3.3 / A.5.6 x — links must be valid and use HTTPS. Checks unique links across scanned pages. */
-export async function checkLinks(pages: PageData[], limit = 150): Promise<LinkCheck[]> {
+export async function checkLinks(pages: PageData[], allowPrivate = false, limit = 150): Promise<LinkCheck[]> {
   const unique = new Map<string, string>();
   for (const p of pages)
     for (const l of p.links) {
@@ -51,8 +52,8 @@ export async function checkLinks(pages: PageData[], limit = 150): Promise<LinkCh
   const list = [...unique.entries()].slice(0, limit);
   return pool(list, 8, async ([url, foundOn]) => {
     try {
-      let res = await safeFetch(url, { method: "HEAD", timeoutMs: 12_000 });
-      if (res.status === 405 || res.status === 403 || res.status === 501) res = await safeFetch(url, { method: "GET", timeoutMs: 15_000 });
+      let res = await safeFetch(url, { method: "HEAD", timeoutMs: 12_000, allowPrivate });
+      if (res.status === 405 || res.status === 403 || res.status === 501) res = await safeFetch(url, { method: "GET", timeoutMs: 15_000, allowPrivate });
       await res.body?.cancel().catch(() => {});
       return { url, status: res.status, ok: res.status < 400, foundOn };
     } catch (e) {
@@ -62,7 +63,7 @@ export async function checkLinks(pages: PageData[], limit = 150): Promise<LinkCh
 }
 
 /** §7.1.3.3 / A.5.6 vii — documents must be accessible (tagged) PDFs; §A.5.3 — ≤ 5 MB recommended. */
-export async function checkPdfs(pages: PageData[], limit = 8): Promise<PdfCheck[]> {
+export async function checkPdfs(pages: PageData[], allowPrivate = false, limit = 8): Promise<PdfCheck[]> {
   const urls = new Set<string>();
   for (const p of pages)
     for (const l of p.links)
@@ -71,7 +72,7 @@ export async function checkPdfs(pages: PageData[], limit = 8): Promise<PdfCheck[
   return pool(list, 3, async (url): Promise<PdfCheck> => {
     const base: PdfCheck = { url, bytes: null, tagged: null, hasStructTree: null, hasLang: null, hasTitle: null };
     try {
-      const res = await safeFetch(url, { method: "GET", timeoutMs: 40_000 });
+      const res = await safeFetch(url, { method: "GET", timeoutMs: 40_000, allowPrivate });
       if (!res.ok) return { ...base, error: `HTTP ${res.status}` };
       const declared = Number(res.headers.get("content-length") || 0);
       if (declared > 40 * 1024 * 1024) {

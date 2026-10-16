@@ -1,19 +1,21 @@
 import { chromium } from "playwright";
 import type { LighthouseSummary } from "../dbim/types";
+import type { BrowserChoice } from "./browser";
 
 /** §10 — loading performance, interactivity and visual stability via Lighthouse (mobile emulation). */
-export async function runLighthouse(url: string): Promise<LighthouseSummary> {
+export async function runLighthouse(url: string, opts: { browser: BrowserChoice; allowPrivate: boolean }): Promise<LighthouseSummary> {
   const { launch } = await import("chrome-launcher");
   const lighthouse = (await import("lighthouse")).default;
   const chrome = await launch({
-    chromePath: chromium.executablePath(),
+    // Installed Chrome is found by chrome-launcher (or CHROME_PATH); Edge and Chromium runs use Playwright's Chromium.
+    chromePath: opts.browser === "chrome" ? undefined : chromium.executablePath(),
     chromeFlags: [
       "--headless=new",
       "--no-sandbox",
       "--disable-gpu",
       "--ignore-certificate-errors",
       // Lighthouse's Chrome is not behind the request guard, so refuse obvious internal targets.
-      ...(process.env.ALLOW_PRIVATE_URLS === "1"
+      ...(opts.allowPrivate
         ? []
         : ["--host-resolver-rules=MAP localhost ~NOTFOUND, MAP *.localhost ~NOTFOUND, MAP *.internal ~NOTFOUND, MAP 169.254.169.254 ~NOTFOUND, MAP metadata.google.internal ~NOTFOUND"]),
     ],

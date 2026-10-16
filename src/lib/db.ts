@@ -71,7 +71,7 @@ function parse(r: RawRow | undefined): ScanRow | null {
 /** Normalised key used to compare scans of the same site over time. */
 export function urlKey(u: string) {
   const x = new URL(u);
-  return `${x.hostname.replace(/^www\./, "")}${x.pathname.replace(/\/$/, "")}`.toLowerCase();
+  return `${x.host.replace(/^www\./, "")}${x.pathname.replace(/\/$/, "")}`.toLowerCase();
 }
 
 export function createScan(url: string, options: ScanOptions, batchId: string | null): string {

@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { createScan, listScans, queueDepth } from "@/lib/db";
 import { DEFAULT_OPTIONS } from "@/lib/dbim/types";
-import { validateScanUrl } from "@/lib/scanner/safety";
+import { headedScansAllowed, privateUrlsAllowed, validateScanUrl } from "@/lib/scanner/safety";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +16,7 @@ const Body = z.object({
   checkLinks: z.boolean().default(true),
   checkPdfs: z.boolean().default(true),
   ai: z.boolean().default(true),
+  headed: z.boolean().default(false),
 });
 
 // Simple per-IP rate limit: 30 scans per hour.
@@ -31,7 +32,10 @@ function rateLimited(ip: string, n: number) {
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request", details: parsed.error.issues }, { status: 400 });
-  const { urls, ...rest } = parsed.data;
+  const { urls, headed, ...rest } = parsed.data;
+  // Server policy, never the request, decides whether local/private URLs may be scanned.
+  const allowPrivate = privateUrlsAllowed();
+  const options = { ...DEFAULT_OPTIONS, ...rest, allowPrivate, headed: headed && headedScansAllowed() };
   const unique = [...new Set(urls.map((u) => u.trim()).filter(Boolean))];
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "local";
   if (rateLimited(ip, unique.length)) return NextResponse.json({ error: "Rate limit reached (30 scans per hour). Try again later." }, { status: 429 });
@@ -41,14 +45,14 @@ export async function POST(req: NextRequest) {
   const errors: { url: string; error: string }[] = [];
   for (const u of unique) {
     try {
-      valid.push((await validateScanUrl(u)).href);
+      valid.push((await validateScanUrl(u, allowPrivate)).href);
     } catch (e) {
       errors.push({ url: u, error: (e as Error).message });
     }
   }
   if (!valid.length) return NextResponse.json({ error: errors.map((e) => `${e.url}: ${e.error}`).join("\n") || "No valid URLs", errors }, { status: 400 });
   const batchId = valid.length > 1 ? crypto.randomBytes(6).toString("base64url") : null;
-  const ids = valid.map((u) => createScan(u, { ...DEFAULT_OPTIONS, ...rest }, batchId));
+  const ids = valid.map((u) => createScan(u, options, batchId));
   return NextResponse.json({ ids, batchId, errors }, { status: 201 });
 }
 

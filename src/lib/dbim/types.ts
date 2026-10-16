@@ -35,6 +35,10 @@ export type ScanOptions = {
   checkLinks: boolean;
   checkPdfs: boolean;
   ai: boolean;
+  /** Allow localhost / private-network URLs. Decided by the server (or CLI), never by the request. */
+  allowPrivate?: boolean;
+  /** Open visible browser windows during the scan (local use only). */
+  headed?: boolean;
 };
 
 export const DEFAULT_OPTIONS: ScanOptions = {
@@ -283,6 +287,8 @@ export type ScanReport = {
   options: ScanOptions;
   scannedAt: string;
   durationMs: number;
+  /** Browser that rendered the scan, e.g. "Google Chrome 141.0.7390.55". */
+  browser?: string;
   pages: { url: string; status: number; title: string; screenshotDesktop?: string; screenshotMobile?: string }[];
   colourGroup: string | null;
   score: number;

@@ -1,3 +1,4 @@
+import { isLocalHost } from "../../scanner/safety";
 import { CCPS_HOST_PATTERN, DOC_MAX_BYTES, EDITABLE_DOC_EXT } from "../spec";
 import type { Evidence, Rule } from "../types";
 import { cap, fmtBytes, pageLabel, shortUrl } from "./util";
@@ -81,13 +82,23 @@ export const contentRules: Rule[] = [
     severity: "critical",
     source: "automated",
     run: ({ site }) => {
-      const insecurePages = site.pages.filter((p) => !p.finalUrl.startsWith("https://"));
+      // A site under development on localhost / a private network is served over plain HTTP; judge HTTPS on production.
+      const local = (u: string) => {
+        try {
+          return isLocalHost(new URL(u).hostname);
+        } catch {
+          return false;
+        }
+      };
+      const insecurePages = site.pages.filter((p) => !p.finalUrl.startsWith("https://") && !local(p.finalUrl));
       const httpLinks = new Map<string, string>();
       const mixed = new Map<string, string>();
       for (const p of site.pages) {
-        for (const l of p.links) if (l.href.startsWith("http://")) httpLinks.set(l.href, pageLabel(p));
-        if (p.finalUrl.startsWith("https://")) for (const n of p.network) if (n.url.startsWith("http://")) mixed.set(n.url, pageLabel(p));
+        for (const l of p.links) if (l.href.startsWith("http://") && !local(l.href)) httpLinks.set(l.href, pageLabel(p));
+        if (p.finalUrl.startsWith("https://")) for (const n of p.network) if (n.url.startsWith("http://") && !local(n.url)) mixed.set(n.url, pageLabel(p));
       }
+      if (site.pages.every((p) => local(p.finalUrl)) && !httpLinks.size && !mixed.size)
+        return { status: "na", message: "Local site served from this machine or network; check HTTPS on the production site.", evidence: [] };
       const ev: Evidence[] = [
         ...insecurePages.map((p) => ({ page: pageLabel(p), value: "page served over HTTP" })),
         ...[...mixed].map(([u, pg]) => ({ page: pg, url: u, value: "mixed content (HTTP resource on HTTPS page)" })),

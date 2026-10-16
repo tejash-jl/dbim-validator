@@ -163,6 +163,7 @@ export default function ReportView({ id, print }: { id: string; print: boolean }
               <span>{ORG_LABEL[report.orgType]} · {ORG_TYPES[report.orgType].lockup}</span>
               <span>Scanned {fmtDate(report.scannedAt)}</span>
               <span>{report.pages.length} page(s) · {Math.round(report.durationMs / 1000)}s</span>
+              {report.browser && <span>{report.browser}</span>}
               {group && (
                 <span>
                   Colour group: <strong>{group}</strong>{" "}

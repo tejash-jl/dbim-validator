@@ -1,7 +1,24 @@
 import dns from "node:dns/promises";
 import net from "node:net";
 
-const allowPrivate = () => process.env.ALLOW_PRIVATE_URLS === "1";
+/**
+ * Whether this server lets users scan localhost and private-network URLs (sites running on your own
+ * machine or intranet). On by default for local use (`npm run dev`), off by default in production
+ * (`npm start`), where it would let anyone reach the server's internal network (SSRF).
+ * ALLOW_PRIVATE_URLS=1 or =0 overrides the default.
+ */
+export function privateUrlsAllowed(): boolean {
+  const v = process.env.ALLOW_PRIVATE_URLS;
+  if (v === "1" || v === "true") return true;
+  if (v === "0" || v === "false") return false;
+  return process.env.NODE_ENV !== "production";
+}
+
+/** localhost, *.localhost, loopback and private-network addresses. */
+export function isLocalHost(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || (net.isIP(host) > 0 && isPrivateIp(host));
+}
 
 function isPrivateIp(ip: string): boolean {
   if (net.isIPv4(ip)) {
@@ -26,9 +43,9 @@ function isPrivateIp(ip: string): boolean {
 
 const cache = new Map<string, Promise<boolean>>();
 
-/** True when the host resolves only to public addresses (or private URLs are explicitly allowed). */
-export function isHostAllowed(hostname: string): Promise<boolean> {
-  if (allowPrivate()) return Promise.resolve(true);
+/** True when the host resolves only to public addresses, or when private URLs are allowed for this scan. */
+export function isHostAllowed(hostname: string, allowPrivate = false): Promise<boolean> {
+  if (allowPrivate) return Promise.resolve(true);
   const host = hostname.replace(/^\[|\]$/g, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) return Promise.resolve(false);
   if (net.isIP(host)) return Promise.resolve(!isPrivateIp(host));
@@ -43,25 +60,40 @@ export function isHostAllowed(hostname: string): Promise<boolean> {
   return p;
 }
 
-export async function validateScanUrl(raw: string): Promise<URL> {
+export async function validateScanUrl(raw: string, allowPrivate = false): Promise<URL> {
   let url: URL;
+  const input = raw.trim();
+  const hasScheme = /^https?:\/\//i.test(input);
   try {
-    url = new URL(/^https?:\/\//i.test(raw.trim()) ? raw.trim() : `https://${raw.trim()}`);
+    url = new URL(hasScheme ? input : `https://${input}`);
   } catch {
     throw new Error("Not a valid URL");
   }
+  // "localhost:3000" almost always means a plain-http dev server.
+  if (!hasScheme && isLocalHost(url.hostname)) url.protocol = "http:";
   if (!/^https?:$/.test(url.protocol)) throw new Error("Only http(s) URLs can be scanned");
   if (url.username || url.password) throw new Error("URLs with credentials are not allowed");
-  if (!(await isHostAllowed(url.hostname))) throw new Error("This host resolves to a private or reserved address");
+  if (!(await isHostAllowed(url.hostname, allowPrivate)))
+    throw new Error(
+      isLocalHost(url.hostname)
+        ? "Scanning localhost and private-network addresses is turned off on this server (set ALLOW_PRIVATE_URLS=1 to allow it)"
+        : "This host resolves to a private or reserved address",
+    );
   url.hash = "";
   return url;
 }
 
 /** Registrable-ish site key, aware of Indian second-level domains. */
 export function siteKey(hostname: string): string {
+  if (net.isIP(hostname.replace(/^\[|\]$/g, "")) || !hostname.includes(".")) return hostname.toLowerCase();
   const labels = hostname.toLowerCase().replace(/^www\./, "").split(".");
   const sld = labels.slice(-2).join(".");
   if (["gov.in", "nic.in", "co.in", "org.in", "ac.in", "net.in", "edu.in", "res.in", "gen.in", "firm.in", "ind.in"].includes(sld))
     return labels.slice(-3).join(".");
   return sld;
+}
+
+/** Visible browser windows only make sense on the machine you are sitting at, never on a hosted server. */
+export function headedScansAllowed(): boolean {
+  return process.env.NODE_ENV !== "production";
 }

@@ -7,9 +7,9 @@ import { DEFAULT_OPTIONS, type ScanOptions } from "../src/lib/dbim/types";
 import type { OrgType } from "../src/lib/dbim/spec";
 
 const args = process.argv.slice(2);
-const url = args.find((a) => !a.startsWith("--") && !/^\d+$/.test(a) && !["ministry", "org-emblem", "org-no-emblem"].includes(a) && !a.endsWith(".json"));
+const url = args.find((a) => !a.startsWith("--") && !/^\d+$/.test(a) && !["ministry", "org-emblem", "org-no-emblem"].includes(a) && !a.endsWith(".json") && !["chrome", "msedge", "chromium"].includes(a));
 if (!url) {
-  console.error("Usage: tsx scripts/scan.ts <url> [--org ministry|org-emblem|org-no-emblem] [--pages N] [--no-lighthouse] [--no-ai] [--no-links] [--no-pdfs] [--json out.json]");
+  console.error("Usage: tsx scripts/scan.ts <url> [--org ministry|org-emblem|org-no-emblem] [--pages N] [--no-lighthouse] [--no-ai] [--no-links] [--no-pdfs] [--json out.json] [--browser chrome|msedge|chromium] [--headed] [--block-private]");
   process.exit(1);
 }
 const flag = (n: string) => args.includes(`--${n}`);
@@ -25,7 +25,11 @@ const options: ScanOptions = {
   ai: !flag("no-ai"),
   checkLinks: !flag("no-links"),
   checkPdfs: !flag("no-pdfs"),
+  // The CLI runs on your own machine, so local and private-network sites are allowed unless --block-private.
+  allowPrivate: !flag("block-private"),
+  headed: flag("headed"),
 };
+if (val("browser")) process.env.DBIM_BROWSER = val("browser");
 
 const outDir = path.join(process.cwd(), "data", "cli", String(Date.now()));
 const icon = { pass: "✅", fail: "❌", warn: "⚠️ ", manual: "📝", na: "➖", error: "💥" } as const;
@@ -36,7 +40,7 @@ runScan(url, options, outDir, (s, p) => process.stderr.write(`[${((Date.now() - 
     const jsonOut = val("json");
     if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify(report, null, 2));
     console.log(`\nDBIM compliance — ${report.url}`);
-    console.log(`Score ${report.score}/100 · colour group: ${report.colourGroup ?? "none"} · ${report.pages.length} page(s) · ${(report.durationMs / 1000).toFixed(0)}s`);
+    console.log(`Score ${report.score}/100 · colour group: ${report.colourGroup ?? "none"} · ${report.pages.length} page(s) · ${(report.durationMs / 1000).toFixed(0)}s${report.browser ? ` · ${report.browser}` : ""}`);
     console.log(Object.entries(report.counts).map(([k, v]) => `${k}: ${v}`).join("  "));
     let cat = "";
     for (const r of report.results) {
@@ -48,6 +52,6 @@ runScan(url, options, outDir, (s, p) => process.stderr.write(`[${((Date.now() - 
     console.log(`\nScreenshots: ${outDir}`);
   })
   .catch((e) => {
-    console.error("Scan failed:", e);
+    console.error(`Scan failed: ${(e as Error).message}`);
     process.exit(1);
   });

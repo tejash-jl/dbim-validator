@@ -26,7 +26,7 @@ export default function Methodology() {
       <div className="card">
         <h2>How a scan works</h2>
         <ol>
-          <li>The homepage and up to 14 inner pages (picked from the navigation and footer: About, Schemes, Documents, Contact, Media, …) are opened in Chromium at 1440px and 390px widths.</li>
+          <li>The homepage and up to 14 inner pages (picked from the navigation and footer: About, Schemes, Documents, Contact, Media, …) are opened in a real browser (Google Chrome by default; the report names the browser and version) at 1440px and 390px widths. Sites on your own machine or local network can be scanned when the server allows it.</li>
           <li>For each page the scanner records computed styles of every visible element, all network responses (sizes, formats, caching), images, icons, links, forms, header and footer structure, hover behaviour, cookies, Core Web Vitals and an axe-core WCAG 2.1 AA audit.</li>
           <li>Site-wide checks run in parallel: link validation, accessible-PDF analysis (tag structure, language, title), Lighthouse, and an AI review of screenshots for visual rules.</li>
           <li>Rules evaluate the collected data. The score weights each check by severity (critical 3, major 2, minor 1) with pass = 1, warning = 0.5 and fail = 0; review and N/A items are excluded.</li>
