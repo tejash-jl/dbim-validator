@@ -123,6 +123,8 @@ table.list a:hover { text-decoration: underline; }
 .b-na, .b-error { background: var(--linen); color: #444; }
 .b-queued, .b-running { background: var(--blue-5); color: var(--key); }
 .b-done { background: #d1e7dd; color: #0f5132; }
+.b-src-web { background: var(--blue-5); color: var(--key); }
+.b-src-cli { background: #e9ecef; color: #343a40; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .tag { display: inline-block; font-size: 12px; color: var(--muted); border: 1px solid var(--grey-1); border-radius: 6px; padding: 0 6px; line-height: 20px; }
 .tag-ai { border-color: #8b70db; color: #4729a3; }
 .tag-manual { border-color: var(--blue-4); color: var(--key); }

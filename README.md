@@ -62,7 +62,7 @@ Start your site as usual (for example `npm run dev` on port 5173), then scan `lo
 - The HTTPS check is marked N/A for local sites, and the report notes that caching, compression and performance reflect your dev server rather than production.
 - If nothing is listening on the port, the scan fails with "Nothing is running at localhost:5173".
 
-To enable the AI-assessed checks, copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY`. Without it those checks are shown as "needs review" and the scan still works.
+To enable the AI-assessed checks, copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY`, or set `DBIM_AI_PROVIDER=bedrock` with AWS credentials to use Claude in Amazon Bedrock. Without it those checks are shown as "needs review" and the scan still works.
 
 ### Command line
 
@@ -80,6 +80,9 @@ npm run scan -- localhost:5173 --org org-emblem              # your local site; 
 | `--headless` | Don't show the browser (shown by default when there's a display; always hidden in CI) |
 | `--block-private` | Refuse localhost and private-network URLs (allowed by default in the CLI) |
 | `--no-lighthouse --no-ai --no-links --no-pdfs` | Skip the slower stages |
+| `--dry-run` | Don't save the scan to the web app; screenshots go to `data/cli/` |
+
+Command-line scans are saved to the same database as the web app, so they appear in **Recent scans** marked **CLI**, with live progress while they run and a full report (PDF and JSON export, re-scan, changes since the previous scan) when they finish. The CLI prints the report's link at the end. Use `--dry-run` for throwaway runs.
 
 ### Production
 
@@ -126,6 +129,8 @@ The score weights each check by severity (critical 3, major 2, minor 1): pass co
 | Variable | Purpose |
 |---|---|
 | `ANTHROPIC_API_KEY` | Enables the AI-assessed checks |
+| `ANTHROPIC_WORKSPACE_ID` | Workspace to use with an organization-level API key (not needed for a workspace-scoped key) |
+| `DBIM_AI_PROVIDER` | `anthropic` (default, uses `ANTHROPIC_API_KEY`) or `bedrock` (Claude in Amazon Bedrock, uses AWS credentials and `AWS_REGION`) |
 | `DBIM_AI_MODEL` | Model for AI checks (default `claude-opus-5-5`) |
 | `WORKER_CONCURRENCY` | Scans run in parallel (default 2) |
 | `PAGE_CONCURRENCY` | Inner pages of one scan collected in parallel (default 3) |

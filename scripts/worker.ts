@@ -1,10 +1,8 @@
 // Background scan worker: claims queued scans from SQLite and runs them.
 // Run alongside the web app: `npm run worker` (or `npm run dev` which starts both).
 import "./load-env";
-import path from "node:path";
-import { claimNext, completeScan, failScan, requeueStale, scanDir, updateProgress } from "../src/lib/db";
+import { claimNext, completeScan, failAbandonedCliScans, failScan, relativiseScreenshots, requeueStale, scanDir, updateProgress } from "../src/lib/db";
 import { runScan } from "../src/lib/scanner/run";
-import type { ScanReport } from "../src/lib/dbim/types";
 
 const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY || 2));
 const POLL_MS = 1500;
@@ -12,22 +10,6 @@ const SCAN_TIMEOUT_MS = Number(process.env.SCAN_TIMEOUT_MS || 15 * 60_000);
 
 let active = 0;
 let stopping = false;
-
-/** Store screenshot paths relative to the scan folder so the API can serve them. */
-function relativise(report: ScanReport, dir: string): ScanReport {
-  const rel = (p?: string) => (p ? path.relative(dir, p) : undefined);
-  return {
-    ...report,
-    pages: report.pages.map((p) => ({
-      ...p,
-      screenshotDesktop: rel(p.screenshotDesktop),
-      screenshotMobile: rel(p.screenshotMobile),
-      screenshotFold: rel(p.screenshotFold),
-      screenshotHeader: rel(p.screenshotHeader),
-      screenshotFooter: rel(p.screenshotFooter),
-    })),
-  };
-}
 
 async function work(id: string, url: string, options: Parameters<typeof runScan>[1]) {
   const dir = scanDir(id);
@@ -41,7 +23,7 @@ async function work(id: string, url: string, options: Parameters<typeof runScan>
       console.log(`[worker]   ${id} +${((Date.now() - t0) / 1000).toFixed(0)}s ${step}`);
     }), timeout]);
     clearTimeout(timer);
-    completeScan(id, relativise(report, dir));
+    completeScan(id, relativiseScreenshots(report, dir));
     console.log(`[worker] ✔ ${id} score ${report.score} in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
   } catch (e) {
     const msg = (e as Error).message.split("\n")[0];
@@ -53,6 +35,8 @@ async function work(id: string, url: string, options: Parameters<typeof runScan>
 async function loop() {
   const n = requeueStale();
   if (n) console.log(`[worker] re-queued ${n} interrupted scan(s)`);
+  const c = failAbandonedCliScans(SCAN_TIMEOUT_MS + 60_000);
+  if (c) console.log(`[worker] marked ${c} interrupted command-line scan(s) as failed`);
   console.log(`[worker] started, concurrency ${CONCURRENCY}`);
   while (!stopping) {
     while (active < CONCURRENCY) {

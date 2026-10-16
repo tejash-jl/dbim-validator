@@ -1,6 +1,15 @@
 import type { Status } from "@/lib/dbim/types";
 
 export const STATUS_LABEL: Record<Status, string> = { pass: "Pass", fail: "Fail", warn: "Warning", manual: "Review", na: "N/A", error: "Error" };
+export const SOURCE_LABEL: Record<string, string> = { web: "Web", cli: "CLI" };
+export const SOURCE_TITLE: Record<string, string> = { web: "Started from the web app", cli: "Started from the command line (npm run scan)" };
+
+/** Stages a scan was told to skip, e.g. ["Lighthouse", "AI review"]. */
+export function skippedStages(o: { lighthouse?: boolean; ai?: boolean; checkLinks?: boolean; checkPdfs?: boolean } | null | undefined) {
+  if (!o) return [];
+  return [o.lighthouse === false && "Lighthouse", o.checkLinks === false && "link check", o.checkPdfs === false && "PDF check", o.ai === false && "AI review"].filter(Boolean) as string[];
+}
+
 export const ORG_LABEL: Record<string, string> = { ministry: "Ministry / Department", "org-emblem": "Org. with emblem", "org-no-emblem": "Org. without emblem" };
 
 export function scoreColour(score: number) {

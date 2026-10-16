@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ORG_LABEL, fmtDate, hostOf, scoreColour } from "./ui";
+import { ORG_LABEL, SOURCE_LABEL, SOURCE_TITLE, fmtDate, hostOf, scoreColour } from "./ui";
 
-type Row = { id: string; url: string; org_type: string; status: string; progress_step: string | null; progress_pct: number; error: string | null; score: number | null; created_at: string };
+type Row = { id: string; url: string; org_type: string; status: string; source?: string; progress_step: string | null; progress_pct: number; error: string | null; score: number | null; created_at: string };
 
 export default function RecentScans({ refreshKey }: { refreshKey: number }) {
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -23,13 +23,14 @@ export default function RecentScans({ refreshKey }: { refreshKey: number }) {
     <div className="table-wrap">
       <table className="list">
         <thead>
-          <tr><th>Website</th><th>Organization type</th><th>Status</th><th>Score</th><th>Started</th></tr>
+          <tr><th>Website</th><th>Organization type</th><th>Mode</th><th>Status</th><th>Score</th><th>Started</th></tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.id}>
               <td><Link href={`/scans/${r.id}`}>{hostOf(r.url)}</Link></td>
               <td>{ORG_LABEL[r.org_type] ?? r.org_type}</td>
+              <td><span className={`badge b-src-${r.source ?? "web"}`} title={SOURCE_TITLE[r.source ?? "web"]}>{SOURCE_LABEL[r.source ?? "web"]}</span></td>
               <td>
                 {r.status === "done" ? <span className="badge b-done">Complete</span>
                   : r.status === "error" ? <span className="badge b-fail" title={r.error ?? ""}>Failed</span>

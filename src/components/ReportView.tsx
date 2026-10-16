@@ -4,11 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CheckResult, ReportPage, ScanReport, Status } from "@/lib/dbim/types";
 import { ORG_TYPES, PRIMARY_PALETTE } from "@/lib/dbim/spec";
-import { ORG_LABEL, STATUS_LABEL, ScoreRing, fmtDate, hostOf, scoreColour } from "./ui";
+import { ORG_LABEL, SOURCE_TITLE, STATUS_LABEL, ScoreRing, fmtDate, hostOf, scoreColour, skippedStages } from "./ui";
 
 type Scan = {
   id: string; url: string; org_type: string; status: "queued" | "running" | "done" | "error";
   progress_step: string | null; progress_pct: number; error: string | null; created_at: string; report: ScanReport | null;
+  source?: "web" | "cli"; options?: Partial<ScanReport["options"]>;
 };
 type Previous = { id: string; created_at: string; score: number | null; statuses: Record<string, Status> } | null;
 
@@ -174,6 +175,7 @@ export default function ReportView({ id, print }: { id: string; print: boolean }
         <div className="card">
           <h1 style={{ fontSize: 24 }}>Scanning {hostOf(scan.url)}</h1>
           <p className="muted">{scan.progress_step ?? "Waiting"} — a full scan with Lighthouse usually takes 2–4 minutes.</p>
+          {scan.source === "cli" && <p className="small muted">Running from the command line (npm run scan); progress updates here live.</p>}
           <div className="progress" role="progressbar" aria-valuenow={scan.progress_pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(scan.progress_pct, 3)}%` }} /></div>
         </div>
       </div>
@@ -215,6 +217,8 @@ export default function ReportView({ id, print }: { id: string; print: boolean }
               <span>Scanned {fmtDate(report.scannedAt)}</span>
               <span>{report.pages.length} page(s) · {Math.round(report.durationMs / 1000)}s</span>
               {report.browser && <span>{report.browser}</span>}
+              <span title={SOURCE_TITLE[scan.source ?? "web"]}>Mode: <strong>{scan.source === "cli" ? "Command line" : "Web app"}</strong></span>
+              {skippedStages(scan.options ?? report.options).length > 0 && <span>Skipped: {skippedStages(scan.options ?? report.options).join(", ")}</span>}
               {group && (
                 <span>
                   Colour group: <strong>{group}</strong>{" "}

@@ -9,6 +9,8 @@ export const DATA_DIR = process.env.DBIM_DATA_DIR || path.join(process.cwd(), "d
 export const scanDir = (id: string) => path.join(DATA_DIR, "scans", id);
 
 export type ScanStatus = "queued" | "running" | "done" | "error";
+/** Where a scan was started: the web app (run by the worker) or the command line (run in the CLI process). */
+export type ScanSource = "web" | "cli";
 
 export type ScanRow = {
   id: string;
@@ -17,6 +19,7 @@ export type ScanRow = {
   org_type: OrgType;
   options: ScanOptions;
   status: ScanStatus;
+  source: ScanSource;
   progress_step: string | null;
   progress_pct: number;
   error: string | null;
@@ -60,6 +63,8 @@ function getDb() {
     CREATE INDEX IF NOT EXISTS scans_url_key ON scans(url_key, created_at);
     CREATE INDEX IF NOT EXISTS scans_batch ON scans(batch_id);
   `);
+  const cols = db.prepare(`PRAGMA table_info(scans)`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === "source")) db.exec(`ALTER TABLE scans ADD COLUMN source TEXT NOT NULL DEFAULT 'web'`);
   return db;
 }
 
@@ -85,13 +90,42 @@ export function createScan(url: string, options: ScanOptions, batchId: string | 
   return id;
 }
 
+/** Records a scan the CLI is running itself, so it shows in the web app with live progress. */
+export function createCliScan(url: string, options: ScanOptions): string {
+  const id = crypto.randomBytes(9).toString("base64url");
+  const now = new Date().toISOString();
+  getDb()
+    .prepare(
+      `INSERT INTO scans (id, url, url_key, org_type, options, status, source, progress_step, progress_pct, created_at, started_at)
+       VALUES (?, ?, ?, ?, ?, 'running', 'cli', 'Starting', 1, ?, ?)`,
+    )
+    .run(id, url, urlKey(url), options.orgType, JSON.stringify(options), now, now);
+  return id;
+}
+
+/** Store screenshot paths relative to the scan folder so the API can serve them. */
+export function relativiseScreenshots(report: ScanReport, dir: string): ScanReport {
+  const rel = (p?: string) => (p ? path.relative(dir, p) : undefined);
+  return {
+    ...report,
+    pages: report.pages.map((p) => ({
+      ...p,
+      screenshotDesktop: rel(p.screenshotDesktop),
+      screenshotMobile: rel(p.screenshotMobile),
+      screenshotFold: rel(p.screenshotFold),
+      screenshotHeader: rel(p.screenshotHeader),
+      screenshotFooter: rel(p.screenshotFooter),
+    })),
+  };
+}
+
 export function getScan(id: string): ScanRow | null {
   return parse(getDb().prepare(`SELECT * FROM scans WHERE id = ?`).get(id) as RawRow | undefined);
 }
 
 export function listScans(opts: { batch?: string; limit?: number } = {}) {
   const limit = Math.min(opts.limit ?? 50, 200);
-  const sql = `SELECT id, url, org_type, status, progress_step, progress_pct, error, score, batch_id, created_at, finished_at
+  const sql = `SELECT id, url, org_type, status, source, progress_step, progress_pct, error, score, batch_id, created_at, finished_at
                FROM scans ${opts.batch ? "WHERE batch_id = ?" : ""} ORDER BY created_at DESC LIMIT ${limit}`;
   const stmt = getDb().prepare(sql);
   return (opts.batch ? stmt.all(opts.batch) : stmt.all()) as Omit<ScanRow, "options" | "report" | "url_key" | "started_at">[];
@@ -136,7 +170,15 @@ export function failScan(id: string, error: string) {
   getDb().prepare(`UPDATE scans SET status = 'error', error = ?, progress_step = 'Failed', finished_at = ? WHERE id = ?`).run(error.slice(0, 500), new Date().toISOString(), id);
 }
 
-/** Scans left 'running' by a crashed worker go back to the queue. */
+/** Scans left 'running' by a crashed worker go back to the queue. CLI scans belong to their own process and are left alone. */
 export function requeueStale() {
-  return getDb().prepare(`UPDATE scans SET status = 'queued', progress_step = 'Re-queued after worker restart', progress_pct = 0 WHERE status = 'running'`).run().changes;
+  return getDb().prepare(`UPDATE scans SET status = 'queued', progress_step = 'Re-queued after worker restart', progress_pct = 0 WHERE status = 'running' AND source = 'web'`).run().changes;
+}
+
+/** CLI scans still 'running' long after they started were interrupted (the terminal was closed or the process killed). */
+export function failAbandonedCliScans(olderThanMs: number) {
+  const cutoff = new Date(Date.now() - olderThanMs).toISOString();
+  return getDb()
+    .prepare(`UPDATE scans SET status = 'error', error = 'The command-line scan was interrupted before it finished', progress_step = 'Failed', finished_at = ? WHERE status = 'running' AND source = 'cli' AND started_at < ?`)
+    .run(new Date().toISOString(), cutoff).changes;
 }
