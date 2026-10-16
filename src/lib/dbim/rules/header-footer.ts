@@ -52,7 +52,7 @@ export const headerFooterRules: Rule[] = [
       const goi = /government\s+of\s+india|भारत\s*सरकार|govt\.?\s+of\s+india/i.test(text);
       const ministry = /ministry\s+of|department\s+of|मंत्रालय|विभाग/i.test(text);
       const ev: Evidence[] = [
-        { value: `State Emblem detected: ${hasEmblem ? h.emblemCandidates.map((e) => e.alt || shortUrl(e.src, 40)).join(", ") : "no"}` },
+        { value: `State Emblem detected: ${hasEmblem ? h.emblemCandidates.map((e) => `${e.alt || (e.src.startsWith("data:") ? "embedded image" : shortUrl(e.src, 40))}${e.detectedBy && e.detectedBy !== "name" ? ` (recognised by ${e.detectedBy})` : ""}`).join(", ") : "no"}` },
         { value: `"Government of India" in header: ${goi ? "yes" : "no"}` },
         { value: `Ministry/Department name in header: ${ministry ? "yes" : "no"}` },
       ];
@@ -64,7 +64,7 @@ export const headerFooterRules: Rule[] = [
           message: ok
             ? hasEmblem
               ? `Header shows the State Emblem with "Government of India" and the Ministry/Department name (${expected}).`
-              : `Header names the Ministry and "Government of India", but the State Emblem image could not be identified by name — verify it is present.`
+              : `Header names the Ministry and "Government of India", but the State Emblem image could not be identified — verify it is present.`
             : `Header does not show the ${expected} text: State Emblem + "Government of India" + Ministry/Department name.`,
           evidence: ev,
           fix: 'Use Logo Lockup 2: State Emblem, "Government of India" and the Ministry/Department name in one language (Hindi on language switch).',
@@ -77,8 +77,9 @@ export const headerFooterRules: Rule[] = [
           evidence: ev,
           fix: "Use Logo Lockup 3A: State Emblem + organization logo and name (tagline optional).",
         };
+      const byName = h.emblemCandidates.some((e) => !e.detectedBy || e.detectedBy === "name");
       return {
-        status: hasEmblem ? "fail" : "pass",
+        status: hasEmblem ? (byName ? "fail" : "warn") : "pass",
         message: hasEmblem
           ? `An image that looks like the State Emblem is in the header, but organizations not authorised to use it must use ${expected}.`
           : `No State Emblem in the header, as required for ${expected}.`,
@@ -98,11 +99,15 @@ export const headerFooterRules: Rule[] = [
     appliesTo: ["ministry", "org-emblem"],
     run: ({ home }) => {
       const em = home.header.emblemCandidates.filter((e) => e.naturalWidth > 0);
-      if (!em.length) return { status: "manual", message: "Emblem dimensions could not be measured (not found by name, or inline SVG). Check visually.", evidence: [] };
+      if (!em.length) return { status: "manual", message: "Emblem dimensions could not be measured (not found, or drawn as inline SVG). Check visually.", evidence: [] };
       const bad = em.filter((e) => isDistorted(e, 0.03));
       return {
         status: bad.length ? "fail" : "pass",
-        message: bad.length ? "The State Emblem is displayed with a distorted aspect ratio." : "The State Emblem keeps its original aspect ratio.",
+        message: bad.length
+          ? bad.some((e) => e.detectedBy?.includes("inside the logo image"))
+            ? "The logo image that contains the State Emblem is stretched, so the emblem is distorted too."
+            : "The State Emblem is displayed with a distorted aspect ratio."
+          : "The State Emblem keeps its original aspect ratio.",
         evidence: em.map((e) => ({ url: e.src, value: `source ${e.naturalWidth}×${e.naturalHeight}, shown ${Math.round(e.width)}×${Math.round(e.height)}` })),
         fix: "Set only the emblem's height (width: auto) so it scales proportionally.",
       };

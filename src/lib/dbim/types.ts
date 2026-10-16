@@ -128,7 +128,7 @@ export type HeaderInfo = {
   hasNav: boolean;
   navItems: string[];
   stickyAfterScroll: boolean | null;
-  emblemCandidates: { src: string; alt: string; width: number; height: number; naturalWidth: number; naturalHeight: number; objectFit: string }[];
+  emblemCandidates: { src: string; alt: string; detectedBy?: string; width: number; height: number; naturalWidth: number; naturalHeight: number; objectFit: string }[];
   logoCandidates: { src: string; alt: string; width: number; height: number; naturalWidth: number; naturalHeight: number; objectFit: string }[];
   hasLogin: boolean;
 };

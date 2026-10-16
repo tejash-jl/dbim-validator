@@ -93,9 +93,10 @@ export function cap(items: Evidence[], n = 12): Evidence[] {
 }
 
 /** True when a raster image is drawn with a visibly different aspect ratio from its source. */
-export function isDistorted(i: { naturalWidth: number; naturalHeight: number; width: number; height: number; objectFit?: string }, tolerance = 0.04) {
+export function isDistorted(i: { src?: string; naturalWidth: number; naturalHeight: number; width: number; height: number; objectFit?: string }, tolerance = 0.04) {
   if (!i.naturalWidth || !i.naturalHeight || !i.width || !i.height) return false;
   if (i.objectFit && i.objectFit !== "fill") return false; // contain/cover/scale-down preserve proportions
+  if (i.src && /\.svg(\?|#|$)|^data:image\/svg/i.test(i.src)) return false; // SVGs keep their aspect ratio inside any box
   return Math.abs(i.naturalWidth / i.naturalHeight / (i.width / i.height) - 1) > tolerance;
 }
 

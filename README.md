@@ -164,6 +164,7 @@ Yes. `npm run scan -- <url> --json report.json` exits after the scan; read `scor
 
 ## Known limitations
 
+- The State Emblem is found by name, by its shape next to "Government of India" context, or as a detailed portrait mark inside a logo image. An emblem in a cross-origin image with no telling name can't be inspected, so the check asks you to confirm it.
 - Heuristic checks (text patterns, navigation labels) can misfire on unusual sites. Please [report false positives](https://github.com/tejash-jl/dbim-validator/issues/new?template=false-positive.yml).
 - The colour group is detected from each group's key colour and two mid shades only; the two lightest tints are too close to ordinary off-whites to tell groups apart.
 - Content that a site pulls in server-side (for example from CCPS) is invisible to the browser, so the CCPS check may fail wrongly.

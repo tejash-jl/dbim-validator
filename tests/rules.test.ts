@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/lib/dbim/engine";
 import { DEFAULT_OPTIONS, type PageData, type SiteData } from "../src/lib/dbim/types";
 import { pickPages } from "../src/lib/scanner/crawl";
+import { isDistorted } from "../src/lib/dbim/rules/util";
 
 function page(over: Partial<PageData> = {}): PageData {
   const base: PageData = {
@@ -91,4 +92,10 @@ describe("pickPages", () => {
     });
     expect(pickPages(home, 5)).toEqual(["https://example.gov.in/about-us", "https://example.gov.in/contact"]);
   });
+});
+
+describe("isDistorted", () => {
+  const shown = { naturalWidth: 704, naturalHeight: 515, width: 353, height: 278 };
+  it("flags a stretched raster image", () => expect(isDistorted({ ...shown, src: "https://x.gov.in/logo.png" })).toBe(true));
+  it("ignores SVGs, which keep their aspect ratio inside any box", () => expect(isDistorted({ ...shown, src: "https://x.gov.in/logo.svg" })).toBe(false));
 });

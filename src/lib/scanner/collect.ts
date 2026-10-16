@@ -37,6 +37,22 @@ async function guardedContext(browser: Browser, allowPrivate: boolean, opts: Par
 
 async function settle(page: Page) {
   await page.waitForLoadState("networkidle", { timeout: 12_000 }).catch(() => {});
+  // Single-page apps can still show a full-screen loader here, especially on a busy machine; wait for real content.
+  await page
+    .waitForFunction(
+      `(() => {
+        if (!document.body || document.body.innerText.trim().length < 40) return false;
+        const el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+        for (let a = el; a && a !== document.body; a = a.parentElement) {
+          const cs = getComputedStyle(a), r = a.getBoundingClientRect();
+          if ((cs.position === "fixed" || cs.position === "absolute") && r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9 && a.innerText.trim().length < 20) return false;
+        }
+        return true;
+      })()`,
+      undefined,
+      { timeout: 10_000, polling: 300 },
+    )
+    .catch(() => {});
   // Scroll through the page so lazy content renders, then return to the top.
   await page
     .evaluate(
@@ -53,7 +69,15 @@ async function settle(page: Page) {
 }
 
 async function inject(page: Page) {
-  await page.evaluate(INPAGE_SOURCE);
+  try {
+    await page.evaluate(INPAGE_SOURCE);
+  } catch (e) {
+    // Some sites redirect themselves after load (e.g. to a language path); wait for the new page and try once more.
+    if (!/context was destroyed|navigat/i.test((e as Error).message)) throw e;
+    await page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
+    await settle(page);
+    await page.evaluate(INPAGE_SOURCE);
+  }
 }
 
 async function screenshotTo(page: Page, file: string, maxHeight = 9000) {

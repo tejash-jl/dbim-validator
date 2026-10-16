@@ -432,8 +432,10 @@
     var emblemRe = /emblem|ashok|satyamev|national[-_ ]?emblem|state[-_ ]?emblem|goi[-_ ]?logo|lion[-_ ]?capital|राष्ट्रीय\s*प्रतीक|सत्यमेव/i;
     function imgInfo(el) {
       var r = docRect(el);
+      var src = el.currentSrc || el.src || (el.tagName === "svg" ? "inline-svg" : "");
       return {
-        src: el.currentSrc || el.src || (el.tagName === "svg" ? "inline-svg" : ""),
+        src: /^data:/.test(src) ? src.slice(0, src.indexOf(",") + 1) + "…" : src,
+        detectedBy: el.__dbimEmblemBy || undefined,
         alt: el.getAttribute("alt") || el.getAttribute("aria-label") || el.getAttribute("title") || "",
         width: r.w, height: r.h,
         naturalWidth: el.naturalWidth || 0, naturalHeight: el.naturalHeight || 0,
@@ -441,10 +443,59 @@
       };
     }
     var headerImgs = headerZone.filter(function (el) { return (el.tagName === "IMG" || el.tagName === "svg") && isVisible(el); });
+    // Context that names the emblem or the Government of India on a wrapper (e.g. <button class="India-logo-container">).
+    var emblemContextRe = /emblem|ashok|satyamev|\bindia\b|india[-_]|goi\b|gov(t|ernment)?[-_ ]?of[-_ ]?india|bharat|भारत\s*सरकार|सत्यमेव/i;
+    var emblemTextRe = /government\s+of\s+india|govt\.?\s+of\s+india|भारत\s*सरकार|satyamev[a]?\s+jayate|सत्यमेव\s+जयते/i;
+    // The State Emblem is a portrait mark (about 3:5) and usually drawn in a single colour.
+    function emblemShaped(el) {
+      var r = docRect(el);
+      var w = el.naturalWidth || r.w, h = el.naturalHeight || r.h;
+      return r.h >= 20 && r.h <= 160 && h > 0 && w / h >= 0.45 && w / h <= 0.8;
+    }
+    function monochrome(el) {
+      if (el.tagName !== "IMG" || !el.complete || !el.naturalWidth) return false;
+      try {
+        var c = document.createElement("canvas");
+        c.width = 40; c.height = Math.max(1, Math.round(40 * el.naturalHeight / el.naturalWidth));
+        var ctx = c.getContext("2d");
+        ctx.drawImage(el, 0, 0, c.width, c.height);
+        var d = ctx.getImageData(0, 0, c.width, c.height).data; // throws for cross-origin images
+        var n = 0, flat = 0, transparent = 0;
+        for (var i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 128) { transparent++; continue; }
+          n++;
+          var mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]);
+          if (mx - mn < 40) flat++;
+        }
+        // A line-art mark on a transparent background, in black, white or grey.
+        return n > 20 && transparent / (d.length / 4) > 0.2 && flat / n > 0.9;
+      } catch { return false; }
+    }
+    function emblemContext(el) {
+      var a = el.parentElement;
+      for (var i = 0; a && i < 3 && a !== document.body; i++, a = a.parentElement) {
+        var s = [a.getAttribute("class") || "", a.id || "", a.getAttribute("aria-label") || "", a.getAttribute("title") || ""].join(" ");
+        if (emblemContextRe.test(s) || emblemTextRe.test(textOf(a).slice(0, 300))) return true;
+      }
+      return false;
+    }
+    var headerRect = header.el ? docRect(header.el) : { x: 0, w: innerWidth };
     var emblems = headerImgs.filter(function (el) {
       var s = [el.currentSrc || el.src || "", el.getAttribute("alt") || "", el.getAttribute("class") || "", el.getAttribute("title") || "", el.getAttribute("aria-label") || ""].join(" ");
-      return emblemRe.test(s);
+      if (emblemRe.test(s)) { el.__dbimEmblemBy = "name"; return true; }
+      // Unnamed images: a portrait mark at the start of the header with Government of India context, or drawn as single-colour line art.
+      if (!emblemShaped(el) || docRect(el).x > headerRect.x + headerRect.w * 0.4) return false;
+      if (emblemContext(el)) { el.__dbimEmblemBy = "shape and Government of India context"; return true; }
+      if (monochrome(el)) { el.__dbimEmblemBy = "shape and single-colour line art"; return true; }
+      return false;
     });
+    if (!emblems.length)
+      headerImgs.filter(function (el) { var r = docRect(el); return el.tagName === "IMG" && r.h >= 30 && r.w >= 30; }).slice(0, 8).some(function (el) {
+        if (!emblemInLockup(el).found) return false;
+        el.__dbimEmblemBy = "a portrait mark inside the logo image";
+        emblems.push(el);
+        return true;
+      });
     var logos = headerImgs.filter(function (el) {
       if (emblems.indexOf(el) >= 0) return false;
       var s = [el.currentSrc || el.src || "", el.getAttribute("alt") || "", el.getAttribute("class") || "", el.id || ""].join(" ");
@@ -712,6 +763,111 @@
     return null;
   }
 
+  // ----- State Emblem inside a combined logo image -----
+  function readPixels(el) {
+    if (el.tagName !== "IMG" || !el.complete || !el.naturalWidth || !el.naturalHeight) return null;
+    try {
+      var nw = el.naturalWidth, nh = el.naturalHeight;
+      // Enough resolution for the emblem's detail: about 160px tall, at most 1600px wide.
+      var scale = Math.min(1, 160 / nh, 1600 / nw);
+      if (nw * scale < 120) scale = Math.min(1, 120 / nw);
+      var w = Math.max(1, Math.round(nw * scale)), h = Math.max(1, Math.round(nh * scale));
+      var c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      var ctx = c.getContext("2d");
+      ctx.drawImage(el, 0, 0, w, h);
+      return { w: w, h: h, d: ctx.getImageData(0, 0, w, h).data }; // throws for cross-origin images
+    } catch { return null; }
+  }
+
+  // Runs of true values, joining gaps of up to `gap` entries.
+  function runs(arr, gap) {
+    var out = [], start = -1, last = -1;
+    for (var i = 0; i < arr.length; i++) {
+      if (!arr[i]) continue;
+      if (start < 0) start = i;
+      else if (i - last > gap + 1) { out.push([start, last]); start = i; }
+      last = i;
+    }
+    if (start >= 0) out.push([start, last]);
+    return out;
+  }
+
+  // Looks for the State Emblem drawn inside a logo image: the only mark in the top row of a stacked lockup
+  // (india.gov.in's npi_logo.svg), or a mark at either end of a side-by-side lockup or banner (ISRO). The emblem is a
+  // portrait, single-colour mark with fine detail (lions, abacus, wheel), which tells it apart from letters.
+  function emblemInLockup(el) {
+    var px = readPixels(el);
+    if (!px) return { found: false, why: "pixels not readable" };
+    var w = px.w, h = px.h, d = px.d;
+    var br = d[0], bgc = d[1], bb = d[2], ba = d[3]; // background = top-left pixel
+    var ink = new Uint8Array(w * h), x, y, i, k;
+    for (i = 0, k = 0; i < d.length; i += 4, k++) {
+      if (d[i + 3] < 160) continue;
+      if (ba >= 128 && Math.abs(d[i] - br) + Math.abs(d[i + 1] - bgc) + Math.abs(d[i + 2] - bb) < 60) continue;
+      ink[k] = 1;
+    }
+    function box(x0, x1, y0, y1) {
+      var rows = [], cols = [];
+      for (var yy = y0; yy <= y1; yy++) for (var xx = x0; xx <= x1; xx++) if (ink[yy * w + xx]) { rows[yy - y0] = true; cols[xx - x0] = true; }
+      var r = runs(rows, 0), c = runs(cols, 0);
+      if (!r.length || !c.length) return null;
+      return { x0: x0 + c[0][0], x1: x0 + c[c.length - 1][1], y0: y0 + r[0][0], y1: y0 + r[r.length - 1][1] };
+    }
+    function stats(b) {
+      var bw = b.x1 - b.x0 + 1, bh = b.y1 - b.y0 + 1;
+      var n = 0, sr = 0, sg = 0, sb = 0, starts = 0, near = 0;
+      for (y = b.y0; y <= b.y1; y++) {
+        for (x = b.x0; x <= b.x1; x++) {
+          if (!ink[y * w + x]) continue;
+          if (x === b.x0 || !ink[y * w + x - 1]) starts++;
+          i = (y * w + x) * 4; n++; sr += d[i]; sg += d[i + 1]; sb += d[i + 2];
+        }
+      }
+      if (n) { sr /= n; sg /= n; sb /= n; }
+      for (y = b.y0; y <= b.y1; y++) for (x = b.x0; x <= b.x1; x++) if (ink[y * w + x]) { i = (y * w + x) * 4; if (Math.abs(d[i] - sr) + Math.abs(d[i + 1] - sg) + Math.abs(d[i + 2] - sb) < 120) near++; }
+      return { w: bw, h: bh, ratio: +(bw / bh).toFixed(2), single: n ? +(near / n).toFixed(2) : 0, detail: +(starts / bh).toFixed(1), fill: +(n / (bw * bh)).toFixed(2) };
+    }
+    // Small images lose the emblem's detail, so they need less of it; portrait letters still stay at 1–3.
+    function emblemLike(st) { return st.h >= 24 && st.ratio >= 0.45 && st.ratio <= 0.8 && st.single >= 0.85 && st.detail >= (st.h < 60 ? 3.5 : EMBLEM_DETAIL); }
+    var tried = [];
+    var rowHas = [], colHas = [];
+    for (y = 0; y < h; y++) for (x = 0; x < w; x++) if (ink[y * w + x]) { rowHas[y] = true; colHas[x] = true; }
+    var bands = runs(rowHas, 1);
+    if (!bands.length) return { found: false, why: "empty image" };
+    var contentH = bands[bands.length - 1][1] - bands[0][0] + 1;
+    // Stacked lockup: the top row holds a single mark.
+    if (bands.length >= 2) {
+      var top = bands[0];
+      var tops = runs(colHas.map(function (_, cx) { for (var cy = top[0]; cy <= top[1]; cy++) if (ink[cy * w + cx]) return true; return false; }), 2);
+      if (tops.length === 1) {
+        var tb = box(tops[0][0], tops[0][1], top[0], top[1]);
+        var ts = tb && stats(tb);
+        if (ts) tried.push({ where: "top", st: ts });
+        if (ts && ts.h >= contentH * 0.25 && emblemLike(ts)) return { found: true, why: "top", st: ts, tried: tried };
+      }
+    }
+    // Side-by-side lockup or banner: a mark at either end, clearly taller than its neighbour.
+    var cols = runs(colHas, 2).map(function (c) { return box(c[0], c[1], 0, h - 1); }).filter(function (b) { return b && (b.x1 - b.x0 + 1) / (b.y1 - b.y0 + 1) >= 0.15; });
+    if (cols.length >= 2) {
+      var ends = [["left", cols[0], cols[1]], ["right", cols[cols.length - 1], cols[cols.length - 2]]];
+      for (var e = 0; e < ends.length; e++) {
+        var blk = ends[e][1], nb = ends[e][2];
+        // The motto under the emblem is often wider than the emblem; measure the mark above it.
+        // Rows with only a few pixels (drop shadows, anti-aliasing) count as gaps.
+        var minInk = Math.max(1, Math.round((blk.x1 - blk.x0 + 1) * 0.03));
+        var inner = runs(rowHas.map(function (_, ry) { if (ry < blk.y0 || ry > blk.y1) return false; for (var rx = blk.x0, cnt = 0; rx <= blk.x1; rx++) if (ink[ry * w + rx]) cnt++; return cnt > minInk; }), 1);
+        var mark = inner.length >= 2 && inner[0][1] - inner[0][0] + 1 >= (blk.y1 - blk.y0 + 1) * 0.6 ? box(blk.x0, blk.x1, inner[0][0], inner[0][1]) : blk;
+        var st = stats(mark);
+        tried.push({ where: ends[e][0], st: st });
+        if (emblemLike(st) && blk.y1 - blk.y0 + 1 >= (nb.y1 - nb.y0 + 1) * 1.3) return { found: true, why: ends[e][0], st: st, tried: tried };
+      }
+    }
+    return { found: false, why: "no emblem-like mark", tried: tried, size: [w, h] };
+  }
+  // Ink runs per row: real emblems measure about 5–11 (less when blurred), portrait letters 1–3.
+  var EMBLEM_DETAIL = 4.5;
+
   window.__dbim = {
     collectViewport: collectViewport,
     collectPage: collectPage,
@@ -719,5 +875,6 @@
     hoverStyles: hoverStyles,
     perf: perf,
     findSearchInput: findSearchInput,
+    emblemInLockup: emblemInLockup,
   };
 })();
