@@ -1,11 +1,29 @@
 import fs from "node:fs";
 import Anthropic from "@anthropic-ai/sdk";
+import { AnthropicBedrockMantle } from "@anthropic-ai/bedrock-sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { AiAssessment, PageData } from "../dbim/types";
 import { ORG_TYPES, type OrgType } from "../dbim/spec";
 
-export const AI_MODEL = process.env.DBIM_AI_MODEL || "claude-opus-5-5";
+/** "anthropic" (default) calls the Claude API with ANTHROPIC_API_KEY; "bedrock" calls Claude in Amazon Bedrock with AWS credentials. */
+export const AI_PROVIDER: "anthropic" | "bedrock" = /^bedrock$/i.test(process.env.DBIM_AI_PROVIDER || "") ? "bedrock" : "anthropic";
+
+/** Bedrock model IDs carry an `anthropic.` prefix (or a cross-region `global.anthropic.` one). */
+export const AI_MODEL = (() => {
+  const m = process.env.DBIM_AI_MODEL || "claude-opus-5-5";
+  return AI_PROVIDER === "bedrock" && m.startsWith("claude-") ? `anthropic.${m}` : m;
+})();
+
+function aiClient() {
+  if (AI_PROVIDER === "bedrock") {
+    // Auth: AWS_BEARER_TOKEN_BEDROCK, AWS_PROFILE, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or the default AWS credential chain.
+    return new AnthropicBedrockMantle({ awsRegion: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1" });
+  }
+  // Organization-level API keys must name the workspace to bill; workspace-scoped keys don't need it.
+  const workspace = process.env.ANTHROPIC_WORKSPACE_ID;
+  return new Anthropic(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {});
+}
 
 /** Each key maps to an AI-assessed rule in rules/ai.ts. */
 export const AI_CHECKS = {
@@ -51,7 +69,7 @@ Judge only what the evidence shows. Use "unclear" when the screenshots do not sh
 Keep explanations factual and specific (name the element you are looking at).`;
 
 export async function runAiChecks(home: PageData, orgType: OrgType): Promise<AiAssessment[]> {
-  const client = new Anthropic();
+  const client = aiClient();
   const org = ORG_TYPES[orgType];
   const keys = (Object.keys(AI_CHECKS) as AiCheckKey[]).filter(
     (k) => orgType === "ministry" || !["pm_quote", "persona_section", "homepage_sections"].includes(k),
@@ -82,8 +100,8 @@ ${checklist}`,
   const response = await client.beta.messages.parse({
     model: AI_MODEL,
     max_tokens: 16000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
+    // Server-side model fallback is a Claude API feature; Bedrock rejects it.
+    ...(AI_PROVIDER === "anthropic" ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
     thinking: { type: "adaptive" },
     output_config: { effort: "high", format: betaZodOutputFormat(AssessmentSchema) },
     system: SYSTEM,
@@ -95,4 +113,21 @@ ${checklist}`,
   return response.parsed_output.assessments
     .filter((a) => keys.includes(a.key))
     .map((a) => ({ ...a, confidence: Math.max(0, Math.min(1, a.confidence)) }));
+}
+
+/** A short, actionable reason the AI review did not run. */
+export function aiErrorMessage(e: unknown): string {
+  const err = e as { status?: number; message?: string; error?: { error?: { message?: string }; message?: string } };
+  const detail = err.error?.error?.message ?? err.error?.message ?? err.message ?? String(e);
+  if (AI_PROVIDER === "bedrock") {
+    if (/credential|could not load|no.*token|security token|signature/i.test(detail) || err.status === 401 || err.status === 403)
+      return `Amazon Bedrock rejected or could not find AWS credentials (${detail.split("\n")[0].slice(0, 140)})`;
+    if (/model|not found|access/i.test(detail) && (err.status === 400 || err.status === 404))
+      return `Amazon Bedrock cannot use model ${AI_MODEL} in ${process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1"}: ${detail.split("\n")[0].slice(0, 140)}`;
+    return detail.split("\n")[0].slice(0, 200);
+  }
+  if (!process.env.ANTHROPIC_API_KEY) return "ANTHROPIC_API_KEY is not configured on the server";
+  if (/anthropic-workspace-id/i.test(detail)) return "The API key is not scoped to a workspace: set ANTHROPIC_WORKSPACE_ID, or use a workspace API key";
+  if (err.status === 401) return "The Anthropic API rejected ANTHROPIC_API_KEY (invalid or revoked key)";
+  return detail.split("\n")[0].slice(0, 200);
 }

@@ -6,7 +6,7 @@ Every check that dbim-validator runs, generated from the rule definitions in [`s
 
 - **Automated:** measured directly in the rendered page.
 - **Heuristic:** inferred from text and structure; may need confirmation.
-- **AI-assessed:** judged by Claude from screenshots and page text (needs `ANTHROPIC_API_KEY`; otherwise shown as "needs review").
+- **AI-assessed:** judged by Claude from screenshots and page text (needs `ANTHROPIC_API_KEY`, or Amazon Bedrock with `DBIM_AI_PROVIDER=bedrock`; otherwise shown as "needs review").
 - **Manual:** cannot be verified from outside the website; listed for the website team to confirm.
 
 Severity sets the weight in the score: critical 3, major 2, minor 1.

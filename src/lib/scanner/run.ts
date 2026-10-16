@@ -1,6 +1,6 @@
 import { evaluate } from "../dbim/engine";
 import type { PageData, ScanOptions, ScanReport, SiteData } from "../dbim/types";
-import { runAiChecks } from "./ai";
+import { aiErrorMessage, runAiChecks } from "./ai";
 import { launchBrowser } from "./browser";
 import { collectPage } from "./collect";
 import { pickPages } from "./crawl";
@@ -100,10 +100,7 @@ export async function runScan(rawUrl: string, options: ScanOptions, outDir: stri
       runAiChecks(pages[0], options.orgType)
         .then((r) => void (site.ai = r))
         .catch((e) => {
-          const msg = (e as Error).message;
-          site.aiError = /authentication|api[_ -]?key|x-api-key/i.test(msg)
-            ? "ANTHROPIC_API_KEY is not configured on the server"
-            : msg.split("\n")[0].slice(0, 200);
+          site.aiError = aiErrorMessage(e);
         }),
     );
   progress("Checking links, PDFs and running AI review", 60);
