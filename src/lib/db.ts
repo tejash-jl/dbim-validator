@@ -125,10 +125,11 @@ export function getScan(id: string): ScanRow | null {
 
 export function listScans(opts: { batch?: string; limit?: number } = {}) {
   const limit = Math.min(opts.limit ?? 50, 200);
-  const sql = `SELECT id, url, org_type, status, source, progress_step, progress_pct, error, score, batch_id, created_at, finished_at
+  const sql = `SELECT id, url, org_type, status, source, progress_step, progress_pct, error, score, batch_id, created_at, finished_at,
+               json_extract(report, '$.counts.fail') AS fails, json_extract(report, '$.counts.warn') AS warns
                FROM scans ${opts.batch ? "WHERE batch_id = ?" : ""} ORDER BY created_at DESC LIMIT ${limit}`;
   const stmt = getDb().prepare(sql);
-  return (opts.batch ? stmt.all(opts.batch) : stmt.all()) as Omit<ScanRow, "options" | "report" | "url_key" | "started_at">[];
+  return (opts.batch ? stmt.all(opts.batch) : stmt.all()) as (Omit<ScanRow, "options" | "report" | "url_key" | "started_at"> & { fails: number | null; warns: number | null })[];
 }
 
 /** Most recent completed scan of the same URL before this one, for before/after comparison. */

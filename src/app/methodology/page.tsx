@@ -16,13 +16,18 @@ const SOURCE = {
 export default function Methodology() {
   const counts = ALL_RULES.reduce<Record<string, number>>((m, r) => ((m[r.source] = (m[r.source] ?? 0) + 1), m), {});
   return (
+    <>
+      <section className="page-head">
+        <div className="container">
+          <p className="eyebrow">Checks &amp; methodology</p>
+          <h1>How every check works</h1>
+          <p className="lead">
+            Every check maps to a section of the <a href={DBIM_SOURCE_URL} target="_blank" rel="noreferrer">Digital Brand Identity Manual v{DBIM_VERSION}</a> and,
+            where one exists, to an item of the Annexure F compliance matrix (F.1 generic checklist, F.2 Ministry/Department checklist).
+          </p>
+        </div>
+      </section>
     <div className="container section">
-      <h1>Methodology</h1>
-      <p className="lead">
-        Every check maps to a section of the <a href={DBIM_SOURCE_URL} target="_blank" rel="noreferrer">Digital Brand Identity Manual v{DBIM_VERSION}</a> and,
-        where one exists, to an item of the Annexure F compliance matrix (F.1 generic checklist, F.2 Ministry/Department checklist).
-      </p>
-
       <div className="card">
         <h2>How a scan works</h2>
         <ol>
@@ -45,7 +50,7 @@ export default function Methodology() {
         const rules = ALL_RULES.filter((r) => r.category === cat);
         if (!rules.length) return null;
         return (
-          <div key={cat} className="section">
+          <div key={cat} className="section" id={cat} style={{ scrollMarginTop: 96 }}>
             <h2>{cat}</h2>
             <div className="table-wrap">
               <table className="list">
@@ -78,5 +83,6 @@ export default function Methodology() {
         </ul>
       </div>
     </div>
+    </>
   );
 }

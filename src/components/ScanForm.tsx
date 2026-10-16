@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ORG_TYPES, type OrgType } from "@/lib/dbim/spec";
 import type { ServerCaps } from "./Home";
+import { Icon } from "./ui";
 
 const BROWSER_LABEL = { chrome: "Google Chrome", msedge: "Microsoft Edge", chromium: "Chromium" } as const;
 
@@ -66,59 +67,67 @@ export default function ScanForm({ caps, onQueued }: { caps: ServerCaps; onQueue
     }
   }
 
+  const optionSummary = [`${maxPages} page${maxPages > 1 ? "s" : ""}`, lighthouse && "Lighthouse", checkLinks && "links", checkPdfs && "PDFs", ai && "AI review"].filter(Boolean).join(", ");
+
   return (
-    <form className="card form-grid" onSubmit={submit} aria-describedby="form-intro">
-      <p id="form-intro" className="muted" style={{ margin: 0 }}>
-        Enter one or more website addresses and choose the organization type. Fields marked * are required.
-      </p>
+    <form className="scan-card" onSubmit={submit} aria-label="Start a scan">
       <div>
-        <label className="field-label" htmlFor="urls">Website URL(s) *</label>
-        <textarea id="urls" required value={urls} onChange={(e) => { setUrls(e.target.value); setError(null); }} placeholder={caps.localUrls ? "https://www.meity.gov.in\nlocalhost:3000" : "https://www.meity.gov.in\nhttps://www.example.gov.in"} spellCheck={false} />
-        <div className="hint">
-          One URL per line, up to 20. Each URL is scanned separately.
-          {caps.localUrls && " Sites running on your machine or local network (localhost, 127.0.0.1, 192.168.x.x) can be scanned too."}
+        <label className="field-label" htmlFor="urls">Website address</label>
+        <div className="url-box">
+          <Icon name="globe" size={20} />
+          <textarea id="urls" required rows={2} value={urls} onChange={(e) => { setUrls(e.target.value); setError(null); }}
+            placeholder={caps.localUrls ? "https://www.meity.gov.in\nlocalhost:3000" : "https://www.meity.gov.in"} spellCheck={false} aria-describedby="urls-hint" />
+        </div>
+        <div className="hint" id="urls-hint">
+          One address per line for a batch of up to 20.{caps.localUrls && " Sites on your machine or local network (localhost, 192.168.x.x) work too."}
         </div>
       </div>
 
       <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-        <legend className="field-label">Organization type * <span className="hint">(decides the logo lockup, header and checklists — DBIM §5.2)</span></legend>
+        <legend className="field-label">Organization type <span className="hint">· sets the logo lockup and checklist (DBIM §5.2)</span></legend>
         <div className="org-options">
           {(Object.keys(ORG_TYPES) as OrgType[]).map((k) => (
             <label key={k} className={`org-option ${orgType === k ? "selected" : ""}`}>
               <input type="radio" name="orgType" value={k} checked={orgType === k} onChange={() => setOrgType(k)} />
-              <div>
-                <strong>{ORG_TYPES[k].label}</strong>
-                <span>{ORG_TYPES[k].lockup} · {ORG_TYPES[k].header}{k === "ministry" ? " · includes Annexure F.2 checklist" : ""}</span>
-              </div>
+              <span className="lockup-sketch" aria-hidden="true">
+                {k !== "org-no-emblem" && (
+                  <svg width="14" height="22" viewBox="0 0 14 22"><rect x="3" y="1" width="8" height="14" rx="3" fill="#162F6A" /><rect x="1" y="16" width="12" height="3" rx="1" fill="#162F6A" /></svg>
+                )}
+                {k !== "ministry" && <span className="logo" />}
+                <span className="lines"><span /><span /></span>
+              </span>
+              <strong>{ORG_TYPES[k].label}</strong>
+              <span className="sub">{ORG_TYPES[k].lockup}{k === "ministry" ? " · adds Annexure F.2" : ""}</span>
             </label>
           ))}
         </div>
       </fieldset>
 
       <details className="advanced">
-        <summary>Scan options</summary>
+        <summary>Scan options · {optionSummary}</summary>
         <div className="options-row">
           <label className="inline-number">
             Pages to scan
             <input type="number" min={1} max={15} value={maxPages} onChange={(e) => setMaxPages(Math.max(1, Math.min(15, Number(e.target.value) || 1)))} />
           </label>
-          <label className="check"><input type="checkbox" checked={lighthouse} onChange={(e) => setLighthouse(e.target.checked)} /> Lighthouse performance</label>
+          <label className="check"><input type="checkbox" checked={lighthouse} onChange={(e) => setLighthouse(e.target.checked)} /> Lighthouse</label>
           <label className="check"><input type="checkbox" checked={checkLinks} onChange={(e) => setCheckLinks(e.target.checked)} /> Check links</label>
           <label className="check"><input type="checkbox" checked={checkPdfs} onChange={(e) => setCheckPdfs(e.target.checked)} /> Check PDFs</label>
-          <label className="check"><input type="checkbox" checked={ai} onChange={(e) => setAi(e.target.checked)} /> AI visual &amp; content review</label>
+          <label className="check"><input type="checkbox" checked={ai} onChange={(e) => setAi(e.target.checked)} /> AI review</label>
         </div>
-        <div className="hint">The homepage plus up to {maxPages - 1} inner page(s) from the navigation and footer are scanned in {BROWSER_LABEL[caps.browser]} at desktop (1440px) and mobile (390px) widths.</div>
+        <div className="hint">The homepage plus up to {maxPages - 1} inner page(s) from the menu and footer, in {BROWSER_LABEL[caps.browser]} at 1440px and 390px wide.</div>
       </details>
 
-      <div className="actions">
-        <button type="submit" className="btn btn-primary btn-lg" disabled={busy || !list.length}>
-          {busy ? "Starting…" : list.length > 1 ? `Validate ${list.length} websites` : "Validate website"}
-        </button>
-        {caps.headed && (
+      <div className="form-foot">
+        {caps.headed ? (
           <label className="check">
             <input type="checkbox" checked={headed} onChange={(e) => toggleHeaded(e.target.checked)} /> Show the browser while scanning
           </label>
-        )}
+        ) : <span />}
+        <button type="submit" className="btn btn-primary btn-lg" disabled={busy || !list.length}>
+          {busy ? "Starting…" : list.length > 1 ? `Validate ${list.length} websites` : "Validate website"}
+          <Icon name="arrow" size={20} strokeWidth={2.2} />
+        </button>
       </div>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {info && <div className="alert alert-info" role="status">{info}</div>}

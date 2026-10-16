@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Noto_Sans, Noto_Sans_Devanagari } from "next/font/google";
+import { Noto_Sans, Noto_Sans_Devanagari, Noto_Sans_Mono } from "next/font/google";
 import { DBIM_SOURCE_URL, DBIM_VERSION } from "@/lib/dbim/spec";
+import { Icon, Mark } from "@/components/ui";
+import NavLinks from "@/components/NavLinks";
 import "./globals.css";
 
-const noto = Noto_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-noto" });
+const noto = Noto_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-noto" });
+const notoMono = Noto_Sans_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-noto-mono" });
 const notoDeva = Noto_Sans_Devanagari({ subsets: ["devanagari"], weight: ["400", "600"], variable: "--font-noto-deva" });
 
 const DESCRIPTION =
@@ -29,47 +32,43 @@ export const metadata: Metadata = {
   twitter: { card: "summary", title: "DBIM Validator", description: DESCRIPTION },
 };
 
-function Logo() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
-      <rect x="2" y="2" width="28" height="28" rx="7" fill="var(--key)" />
-      <path d="M9 16.5l4.5 4.5L23 11.5" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${noto.variable} ${notoDeva.variable}`}>
+    <html lang="en" className={`${noto.variable} ${notoDeva.variable} ${notoMono.variable}`}>
       <body>
-        <a href="#main" className="skip-link">Skip to main content</a>
+        <div className="utility-bar no-print">
+          <div className="container utility-inner">
+            <a href="#main" className="skip-link">Skip to main content</a>
+            <span className="note">Independent open-source tool · not a Government of India service</span>
+          </div>
+        </div>
         <header className="site-header">
           <div className="container header-inner">
             <Link href="/" className="brand" aria-label="DBIM Validator home">
-              <Logo />
+              <Mark size={40} />
               <span>
                 <strong>DBIM Validator</strong>
                 <small>Digital Brand Identity Manual compliance checker</small>
               </span>
             </Link>
-            <nav aria-label="Main">
-              <Link href="/">New scan</Link>
-              <Link href="/methodology">Methodology</Link>
-            </nav>
+            <NavLinks github={<Icon name="github" size={18} />} />
           </div>
         </header>
         <main id="main">{children}</main>
         <footer className="site-footer">
           <div className="container footer-inner">
-            <p>
-              Independent compliance checker based on the{" "}
-              <a href={DBIM_SOURCE_URL} target="_blank" rel="noreferrer">Digital Brand Identity Manual v{DBIM_VERSION}</a>{" "}
-              published by MeitY / NIC. Not an official Government of India service; results do not replace GIGW / STQC certification.
-            </p>
-            <p>
-              <a href="https://dbimtoolkit.digifootprint.gov.in" target="_blank" rel="noreferrer">DBIM Toolkit</a> ·{" "}
-              <a href="https://guidelines.india.gov.in" target="_blank" rel="noreferrer">GIGW 3.0</a> · <Link href="/methodology">How checks work</Link>
-            </p>
+            <div className="about">
+              <strong>DBIM Validator</strong>
+              An independent open-source project based on the{" "}
+              <a href={DBIM_SOURCE_URL} target="_blank" rel="noreferrer">Digital Brand Identity Manual v{DBIM_VERSION}</a> published by MeitY and NIC. Not
+              affiliated with or endorsed by MeitY, NIC or the Government of India. A high score does not certify a website or replace GIGW / STQC review.
+            </div>
+            <nav aria-label="Footer">
+              <Link href="/methodology">Methodology</Link>
+              <a href="https://dbimtoolkit.digifootprint.gov.in" target="_blank" rel="noreferrer">DBIM Toolkit</a>
+              <a href="https://github.com/tejash-jl/dbim-validator/issues/new?template=false-positive.yml" target="_blank" rel="noreferrer">Report a false positive</a>
+              <a href="https://github.com/tejash-jl/dbim-validator" target="_blank" rel="noreferrer">Source on GitHub · MIT</a>
+            </nav>
           </div>
         </footer>
       </body>
