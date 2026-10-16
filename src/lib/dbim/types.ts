@@ -228,6 +228,8 @@ export type LighthouseSummary = {
   fcp: number | null;
   si: number | null;
   formFactor: string;
+  /** Page Lighthouse ended up auditing (differs from the scanned page if the site redirected it). */
+  finalUrl?: string;
 };
 
 export type LinkCheck = { url: string; status: number | null; ok: boolean; error?: string; foundOn: string };

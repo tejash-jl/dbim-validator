@@ -43,6 +43,7 @@ export async function runLighthouse(url: string, opts: { browser: BrowserChoice;
       fcp: num("first-contentful-paint"),
       si: num("speed-index"),
       formFactor: lhr.configSettings.formFactor,
+      finalUrl: lhr.finalDisplayedUrl,
     };
   } finally {
     await chrome.kill();

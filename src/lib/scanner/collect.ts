@@ -16,10 +16,16 @@ const PERF_INIT = `(() => {
   try { new PerformanceObserver((l) => l.getEntries().forEach((e) => { if (!e.hadRecentInput) s.cls += e.value; })).observe({ type: "layout-shift", buffered: true }); } catch {}
 })();`;
 
+// Anti-DevTools scripts (e.g. the disable-devtool library) time console.log/table/clear calls, which are slow while
+// a browser is driven over the DevTools protocol, and redirect to a "not allowed" page. The scanner never reads the
+// page console, so silencing these calls lets it see the same page a visitor does.
+const QUIET_CONSOLE = `(() => { for (const k of ["log", "table", "clear"]) { try { console[k] = () => {}; } catch {} } })();`;
+
 const TRACKING_COOKIE = /^(_ga|_gid|_gat|_gcl|_fbp|_fbc|_hj|__utm|_clck|_clsk|IDE$|NID$|_uetsid|_uetvid|__gads|_pin_|mp_|ajs_)/i;
 
 async function guardedContext(browser: Browser, allowPrivate: boolean, opts: Parameters<Browser["newContext"]>[0]): Promise<BrowserContext> {
   const ctx = await browser.newContext({ ignoreHTTPSErrors: true, ...opts });
+  await ctx.addInitScript(QUIET_CONSOLE);
   await ctx.route("**/*", async (route) => {
     const u = new URL(route.request().url());
     if (!/^(https?|data|blob):$/.test(u.protocol)) return route.continue();

@@ -12,6 +12,16 @@ export type Progress = (step: string, pct: number) => void;
 
 const PAGE_CONCURRENCY = Math.max(1, Number(process.env.PAGE_CONCURRENCY || 3));
 
+/** Quick reachability probe: any HTTP response (even an error status) counts. Redirects are not followed. */
+async function responds(url: URL, timeoutMs = 10_000): Promise<boolean> {
+  try {
+    await fetch(url, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Turn browser navigation errors into something a person can act on. */
 export function explainLoadError(e: Error, url: URL): string {
   const m = e.message;
@@ -29,7 +39,15 @@ export async function runScan(rawUrl: string, options: ScanOptions, outDir: stri
   const started = Date.now();
   const notes: string[] = [];
   const allowPrivate = options.allowPrivate ?? false;
-  const url = await validateScanUrl(rawUrl, allowPrivate);
+  let url = await validateScanUrl(rawUrl, allowPrivate);
+  // Some sites only listen on HTTPS: plain http:// hangs instead of redirecting. Switch rather than time out.
+  if (url.protocol === "http:" && !isLocalHost(url.hostname) && !(await responds(url))) {
+    const secure = new URL(url.href.replace(/^http:/, "https:"));
+    if (await responds(secure)) {
+      notes.push(`${url.host} did not respond over http://, so the https:// address was scanned instead.`);
+      url = secure;
+    }
+  }
   const launched = await launchBrowser({ headed: options.headed });
   const { browser, userAgents } = launched;
   if (launched.fallbackNote) notes.push(launched.fallbackNote);
@@ -94,7 +112,11 @@ export async function runScan(rawUrl: string, options: ScanOptions, outDir: stri
   if (options.lighthouse) {
     progress("Running Lighthouse", 80);
     try {
-      site.lighthouse = await runLighthouse(pages[0].finalUrl, { browser: launched.choice, allowPrivate });
+      const lh = await runLighthouse(pages[0].finalUrl, { browser: launched.choice, allowPrivate });
+      // Lighthouse's browser can't use the scanner's page fixes, so a site that blocks automation may send it elsewhere.
+      if (lh.finalUrl && new URL(lh.finalUrl).pathname !== new URL(pages[0].finalUrl).pathname)
+        site.lighthouseError = `Lighthouse was redirected to ${lh.finalUrl} instead of auditing ${pages[0].finalUrl}; the site appears to block automated audit tools, so its scores are not shown.`;
+      else site.lighthouse = lh;
     } catch (e) {
       site.lighthouseError = (e as Error).message.split("\n")[0].slice(0, 200);
     }

@@ -24,7 +24,7 @@ DBIM Validator automates what can be measured, flags what needs a human, and tur
 ## Features
 
 - **98 checks across every DBIM chapter:** colours, iconography, typography, header and footer, logo, imagery, content, search, performance, accessibility, Ministry information architecture and forms. [See every check →](docs/CHECKS.md)
-- **Scans in real Google Chrome:** Playwright drives your installed Chrome (or Edge, or Chromium) at desktop (1440px) and mobile (390px) widths, so screenshots and measurements match what visitors see. It reads computed styles, network requests, hover states, sticky headers, cookies and the search box. Turn on *Show the browser while scanning* to watch it work.
+- **Scans in real Google Chrome:** Playwright drives your installed Chrome (or Edge, or Chromium) at desktop (1440px) and mobile (390px) widths, so screenshots and measurements match what visitors see. It reads computed styles, network requests, hover states, sticky headers, cookies and the search box. When you run it locally, Chrome opens on screen so you can watch the scan (untick *Show the browser while scanning* to hide it).
 - **Test sites before they go live:** scan sites running on your machine or local network (`localhost:3000`, `127.0.0.1`, `192.168.x.x`), so you can fix DBIM issues during development.
 - **Organization-aware:** choose *Ministry / Department*, *organization with the State Emblem* or *organization without it*, and the expected logo lockup, header type and checklist follow (DBIM §5.2).
 - **Accessibility and performance:** axe-core WCAG 2.1 AA audit, Lighthouse scores and Core Web Vitals, link checking and tagged-PDF analysis.
@@ -68,7 +68,7 @@ To enable the AI-assessed checks, copy `.env.example` to `.env.local` and set `A
 
 ```bash
 npm run scan -- https://www.meity.gov.in --org ministry --pages 6 --json report.json
-npm run scan -- localhost:5173 --org org-emblem --headed     # your local site, in a visible Chrome window
+npm run scan -- localhost:5173 --org org-emblem              # your local site; Chrome opens so you can watch
 ```
 
 | Flag | Meaning |
@@ -77,7 +77,7 @@ npm run scan -- localhost:5173 --org org-emblem --headed     # your local site, 
 | `--pages N` | Homepage plus up to N−1 inner pages (default 6; the web app allows up to 15) |
 | `--json file` | Write the full report as JSON |
 | `--browser chrome \| msedge \| chromium` | Browser to scan with (default `chrome`, falls back to Chromium) |
-| `--headed` | Show the browser windows while scanning |
+| `--headless` | Don't show the browser (shown by default when there's a display; always hidden in CI) |
 | `--block-private` | Refuse localhost and private-network URLs (allowed by default in the CLI) |
 | `--no-lighthouse --no-ai --no-links --no-pdfs` | Skip the slower stages |
 
@@ -133,7 +133,7 @@ The score weights each check by severity (critical 3, major 2, minor 1): pass co
 | `DBIM_DATA_DIR` | Where the SQLite database and screenshots are stored (default `./data`) |
 | `APP_ORIGIN` | Public origin of the app, used for PDF export and page metadata |
 | `DBIM_BROWSER` | `chrome` (default), `msedge` or `chromium`. Uses the installed browser and falls back to Playwright's Chromium |
-| `DBIM_HEADED=1` | Always show browser windows while scanning (local use only) |
+| `DBIM_HEADED=1` | Show browser windows for scans that don't say otherwise (the web form and CLI already show them locally by default) |
 | `ALLOW_PRIVATE_URLS` | `1` allows localhost and private-network URLs, `0` blocks them. Default: allowed in development and the CLI, blocked in production |
 
 ## FAQ
@@ -151,7 +151,7 @@ No. It's an independent open-source project based on the published manual. A hig
 No. It covers the DBIM, plus an automated WCAG 2.1 AA check through axe-core. GIGW and STQC audits include manual accessibility testing and process reviews that no scanner can do.
 
 **Why did the scan of a site fail or get blocked?**
-Many government sites use bot protection. The scanner uses a real browser with a normal user agent, which works on most sites, but some may still refuse automated visits. If a site doesn't respond within 60 seconds the report says so; check whether it opens from your network at all.
+Many government sites use bot protection. The scanner uses a real browser with a normal user agent, which works on most sites, but some may still refuse automated visits. If a site doesn't respond within 60 seconds the report says so; check whether it opens from your network at all. Two common cases are handled automatically: sites that only answer on `https://` (an `http://` address that hangs is retried over HTTPS), and sites that use "DevTools not allowed" scripts such as `disable-devtool`, which would otherwise redirect an automated browser to a blank page.
 
 **Can I test a website that's still on my machine?**
 Yes. Run your site locally and scan `localhost:<port>` (or a `192.168.x.x` address on your network). See [Testing a site on your machine](#testing-a-site-on-your-machine).

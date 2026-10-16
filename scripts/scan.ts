@@ -9,7 +9,7 @@ import type { OrgType } from "../src/lib/dbim/spec";
 const args = process.argv.slice(2);
 const url = args.find((a) => !a.startsWith("--") && !/^\d+$/.test(a) && !["ministry", "org-emblem", "org-no-emblem"].includes(a) && !a.endsWith(".json") && !["chrome", "msedge", "chromium"].includes(a));
 if (!url) {
-  console.error("Usage: tsx scripts/scan.ts <url> [--org ministry|org-emblem|org-no-emblem] [--pages N] [--no-lighthouse] [--no-ai] [--no-links] [--no-pdfs] [--json out.json] [--browser chrome|msedge|chromium] [--headed] [--block-private]");
+  console.error("Usage: tsx scripts/scan.ts <url> [--org ministry|org-emblem|org-no-emblem] [--pages N] [--no-lighthouse] [--no-ai] [--no-links] [--no-pdfs] [--json out.json] [--browser chrome|msedge|chromium] [--headed | --headless] [--block-private]");
   process.exit(1);
 }
 const flag = (n: string) => args.includes(`--${n}`);
@@ -27,7 +27,8 @@ const options: ScanOptions = {
   checkPdfs: !flag("no-pdfs"),
   // The CLI runs on your own machine, so local and private-network sites are allowed unless --block-private.
   allowPrivate: !flag("block-private"),
-  headed: flag("headed"),
+  // Show the browser by default when there's a screen to show it on; --headless (or CI) turns it off.
+  headed: flag("headed") || (!flag("headless") && !process.env.CI && (process.platform !== "linux" || !!process.env.DISPLAY)),
 };
 if (val("browser")) process.env.DBIM_BROWSER = val("browser");
 
