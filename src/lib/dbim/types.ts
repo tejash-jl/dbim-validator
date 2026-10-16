@@ -283,6 +283,18 @@ export type Rule = {
     Partial<Pick<CheckResult, "source">>;
 };
 
+/** A scanned page as stored in the report. Screenshot fields are file names inside the scan folder. */
+export type ReportPage = {
+  url: string;
+  status: number;
+  title: string;
+  screenshotDesktop?: string; // full page (up to 9000px)
+  screenshotMobile?: string; // full page at 390px
+  screenshotFold?: string; // desktop, first screen only
+  screenshotHeader?: string;
+  screenshotFooter?: string;
+};
+
 export type ScanReport = {
   url: string;
   orgType: OrgType;
@@ -291,7 +303,7 @@ export type ScanReport = {
   durationMs: number;
   /** Browser that rendered the scan, e.g. "Google Chrome 141.0.7390.55". */
   browser?: string;
-  pages: { url: string; status: number; title: string; screenshotDesktop?: string; screenshotMobile?: string }[];
+  pages: ReportPage[];
   colourGroup: string | null;
   score: number;
   categoryScores: { category: string; score: number; pass: number; fail: number; warn: number; manual: number }[];

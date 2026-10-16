@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { CheckResult, ScanReport, Status } from "@/lib/dbim/types";
+import type { CheckResult, ReportPage, ScanReport, Status } from "@/lib/dbim/types";
 import { ORG_TYPES, PRIMARY_PALETTE } from "@/lib/dbim/spec";
 import { ORG_LABEL, STATUS_LABEL, ScoreRing, fmtDate, hostOf, scoreColour } from "./ui";
 
@@ -19,7 +19,43 @@ const FILTERS: { key: "all" | Status; label: string }[] = [
 const SOURCE_LABEL = { automated: "Automated", heuristic: "Heuristic", ai: "AI-assessed", manual: "Manual" } as const;
 const RANK: Record<Status, number> = { fail: 0, warn: 1, error: 2, manual: 3, pass: 4, na: 5 };
 
-function ResultItem({ r, open }: { r: CheckResult; open: boolean }) {
+/** Screenshot file names for a page. Reports from before these were stored fall back to the scanner's naming. */
+function shotsOf(p: ReportPage) {
+  const derive = (suffix: string) => p.screenshotDesktop?.replace(/-desktop\.jpg$/, `-${suffix}.jpg`);
+  return {
+    desktop: p.screenshotDesktop,
+    mobile: p.screenshotMobile,
+    fold: p.screenshotFold ?? derive("fold"),
+    header: p.screenshotHeader ?? derive("header"),
+    footer: p.screenshotFooter ?? derive("footer"),
+  };
+}
+
+type ShotRef = { file: string; alt: string; caption: string };
+
+/** Which homepage crop illustrates a check, if any. */
+function shotForCheck(id: string): "header" | "footer" | null {
+  if (/^(header|logo)\./.test(id) || ["ai.logo_lockup", "ai.emblem_integrity", "ai.header_layout", "manual.emblem-source"].includes(id)) return "header";
+  if (/^footer\./.test(id) || id === "colours.footer") return "footer";
+  return null;
+}
+
+function Shot({ scanId, file, alt, print, className }: { scanId: string; file?: string; alt: string; print: boolean; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!file || failed) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- screenshots are served from the scan store
+    <img
+      className={className}
+      src={`/api/scans/${scanId}/files/${file}`}
+      alt={alt}
+      loading={print ? "eager" : "lazy"}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function ResultItem({ r, open, scanId, shot, print }: { r: CheckResult; open: boolean; scanId: string; shot: ShotRef | null; print: boolean }) {
   return (
     <details className={`result s-${r.status}`} open={open}>
       <summary>
@@ -35,7 +71,7 @@ function ResultItem({ r, open }: { r: CheckResult; open: boolean }) {
           <span className={`tag tag-${r.source}`}>{SOURCE_LABEL[r.source]}{r.confidence != null ? ` · ${Math.round(r.confidence * 100)}%` : ""}</span>
         </div>
       </summary>
-      {(r.evidence.length > 0 || r.fix) && (
+      {(r.evidence.length > 0 || r.fix || shot) && (
         <div className="r-body">
           {r.evidence.length > 0 && (
             <table className="evidence">
@@ -54,6 +90,12 @@ function ResultItem({ r, open }: { r: CheckResult; open: boolean }) {
                 ))}
               </tbody>
             </table>
+          )}
+          {shot && (
+            <figure className="evidence-shot">
+              <Shot scanId={scanId} file={shot.file} alt={shot.alt} print={print} />
+              <figcaption className="small muted">{shot.caption}</figcaption>
+            </figure>
           )}
           {r.fix && <div className="fix"><strong>How to fix:</strong> {r.fix}</div>}
         </div>
@@ -149,7 +191,16 @@ export default function ReportView({ id, print }: { id: string; print: boolean }
     );
 
   const page = report.pages[shotPage] ?? report.pages[0];
+  const homeShots = shotsOf(report.pages[0]);
   const group = report.colourGroup;
+  const pathLabel = (u: string) => {
+    try {
+      const x = new URL(u);
+      return x.pathname === "/" ? "Homepage" : decodeURIComponent(x.pathname);
+    } catch {
+      return u;
+    }
+  };
 
   return (
     <div className="container section" data-report-ready>
@@ -179,12 +230,31 @@ export default function ReportView({ id, print }: { id: string; print: boolean }
             {!print && (
               <div className="actions no-print" style={{ marginTop: 16 }}>
                 <a className="btn btn-primary" href={`/api/scans/${id}/pdf`}>Download PDF</a>
+                <a className="btn btn-secondary" href={`/api/scans/${id}/pdf?inline=1`} target="_blank" rel="noreferrer">Preview PDF</a>
                 <a className="btn btn-secondary" href={`/api/scans/${id}?download=json`}>Download JSON</a>
                 <button className="btn btn-secondary" onClick={rescan} disabled={rescanning}>{rescanning ? "Queuing…" : "Re-scan"}</button>
               </div>
             )}
           </div>
           <ScoreRing score={report.score} />
+        </div>
+      </div>
+
+      <div className="card preview">
+        <h2>Homepage preview</h2>
+        <p className="small muted" style={{ marginTop: 0 }}>
+          The first screen of <a href={report.pages[0].url} target="_blank" rel="noreferrer">{report.pages[0].url}</a> as the scanner saw it
+          {report.browser ? ` in ${report.browser}` : ""}.
+        </p>
+        <div className="preview-shots">
+          <figure>
+            <Shot scanId={id} file={homeShots.fold ?? homeShots.desktop} alt={`Desktop view of ${report.pages[0].url}`} print={print} className="crop" />
+            <figcaption className="small muted">Desktop · 1440px</figcaption>
+          </figure>
+          <figure>
+            <Shot scanId={id} file={homeShots.mobile} alt={`Mobile view of ${report.pages[0].url}`} print={print} className="crop" />
+            <figcaption className="small muted">Mobile · 390px</figcaption>
+          </figure>
         </div>
       </div>
 
@@ -230,7 +300,12 @@ export default function ReportView({ id, print }: { id: string; print: boolean }
         {[...byCategory.entries()].map(([cat, rs]) => (
           <div key={cat} id={`cat-${cat}`}>
             <div className="cat-title"><h3>{cat}</h3><span className="muted small">{rs.length} check(s)</span></div>
-            {rs.map((r) => <ResultItem key={r.id} r={r} open={print ? r.status === "fail" || r.status === "warn" : false} />)}
+            {rs.map((r) => {
+              const kind = shotForCheck(r.id);
+              const file = kind ? homeShots[kind] : undefined;
+              const shot = kind && file ? { file, alt: `Homepage ${kind} screenshot`, caption: `Homepage ${kind} as scanned (desktop, 1440px)` } : null;
+              return <ResultItem key={r.id} r={r} scanId={id} shot={shot} print={print} open={print ? r.status === "fail" || r.status === "warn" : false} />;
+            })}
           </div>
         ))}
         {!results.length && <p className="muted">No checks match this filter.</p>}
@@ -252,28 +327,51 @@ export default function ReportView({ id, print }: { id: string; print: boolean }
 
       <div className="section">
         <h2>Scanned pages</h2>
-        {report.pages.length > 1 && (
-          <div className="tabs no-print" role="group" aria-label="Choose page">
-            {report.pages.map((p, i) => (
-              <button key={p.url} className="chip" aria-pressed={i === shotPage} onClick={() => setShotPage(i)}>
-                {(() => { try { const u = new URL(p.url); return u.pathname === "/" ? "Homepage" : decodeURIComponent(u.pathname); } catch { return p.url; } })()}
-              </button>
-            ))}
-          </div>
+        {print ? (
+          // The PDF shows every page: first screen on desktop, and mobile.
+          report.pages.map((p) => {
+            const sh = shotsOf(p);
+            return (
+              <div key={p.url} className="print-page">
+                <h3>{pathLabel(p.url)}</h3>
+                <p className="small muted">{p.url} — HTTP {p.status} — {p.title}</p>
+                <div className="preview-shots">
+                  <figure>
+                    <Shot scanId={id} file={sh.fold ?? sh.desktop} alt={`Desktop view of ${p.url}`} print className="crop" />
+                    <figcaption className="small muted">Desktop · 1440px</figcaption>
+                  </figure>
+                  <figure>
+                    <Shot scanId={id} file={sh.mobile} alt={`Mobile view of ${p.url}`} print className="crop" />
+                    <figcaption className="small muted">Mobile · 390px</figcaption>
+                  </figure>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <>
+            {report.pages.length > 1 && (
+              <div className="tabs" role="group" aria-label="Choose page">
+                {report.pages.map((p, i) => (
+                  <button key={p.url} className="chip" aria-pressed={i === shotPage} onClick={() => setShotPage(i)}>
+                    {pathLabel(p.url)}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="small muted"><a href={page.url} target="_blank" rel="noreferrer">{page.url}</a> — HTTP {page.status} — {page.title}</p>
+            <div className="shots">
+              <div>
+                <div className="small muted">Desktop · 1440px (full page)</div>
+                <div className="shot"><Shot key={`d-${shotPage}`} scanId={id} file={page.screenshotDesktop} alt={`Desktop screenshot of ${page.url}`} print={false} /></div>
+              </div>
+              <div>
+                <div className="small muted">Mobile · 390px (full page)</div>
+                <div className="shot"><Shot key={`m-${shotPage}`} scanId={id} file={page.screenshotMobile} alt={`Mobile screenshot of ${page.url}`} print={false} /></div>
+              </div>
+            </div>
+          </>
         )}
-        <p className="small muted"><a href={page.url} target="_blank" rel="noreferrer">{page.url}</a> — HTTP {page.status} — {page.title}</p>
-        <div className="shots">
-          <div>
-            <div className="small muted">Desktop · 1440px</div>
-            {/* eslint-disable-next-line @next/next/no-img-element -- screenshots are served from the scan store */}
-            <div className="shot">{page.screenshotDesktop && <img src={`/api/scans/${id}/files/${page.screenshotDesktop}`} alt={`Desktop screenshot of ${page.url}`} loading="lazy" />}</div>
-          </div>
-          <div>
-            <div className="small muted">Mobile · 390px</div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <div className="shot">{page.screenshotMobile && <img src={`/api/scans/${id}/files/${page.screenshotMobile}`} alt={`Mobile screenshot of ${page.url}`} loading="lazy" />}</div>
-          </div>
-        </div>
       </div>
 
       {report.notes.length > 0 && (

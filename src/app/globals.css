@@ -177,6 +177,17 @@ table.list a:hover { text-decoration: underline; }
 .shot { border: 1px solid var(--linen); border-radius: 8px; overflow: auto; max-height: 560px; background: var(--surface); }
 .shot img { width: 100%; display: block; }
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+/* Screenshot previews: first screen only, cropped from the top. */
+.preview-shots { display: grid; grid-template-columns: 3fr 1fr; gap: 16px; align-items: start; }
+.preview-shots figure, .evidence-shot { margin: 0; }
+.preview-shots img.crop { width: 100%; display: block; border: 1px solid var(--linen); border-radius: 8px; object-fit: cover; object-position: top; background: var(--surface); }
+.preview-shots figure:first-child img.crop { aspect-ratio: 1440 / 900; }
+.preview-shots figure:last-child img.crop { aspect-ratio: 390 / 844; }
+.preview-shots figcaption, .evidence-shot figcaption { margin-top: 4px; }
+.evidence-shot { margin: 12px 0; }
+.evidence-shot img { max-width: 100%; max-height: 360px; display: block; border: 1px solid var(--linen); border-radius: 6px; }
+.print-page { margin-bottom: 20px; }
+.print-page h3 { margin: 0 0 2px; }
 .progress { height: 10px; background: var(--linen); border-radius: 5px; overflow: hidden; }
 .progress > span { display: block; height: 100%; background: var(--blue-2); transition: width 0.4s; }
 .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -196,12 +207,14 @@ table.list a:hover { text-decoration: underline; }
   .site-header nav a { padding: 6px 8px; font-size: 14px; white-space: nowrap; }
   .report-head { grid-template-columns: 1fr; }
   .shots, .diff { grid-template-columns: 1fr; }
+  .preview-shots { grid-template-columns: 2fr 1fr; gap: 10px; }
   .result summary { grid-template-columns: 16px 1fr; }
   .result .r-tags { grid-column: 2; justify-content: flex-start; }
   .result .r-body { padding-left: 14px; }
 }
 
 @media print {
+  .preview, .print-page, .evidence-shot { break-inside: avoid; }
   .site-header, .site-footer, .no-print, .skip-link { display: none !important; }
   body { font-size: 12px; }
   .card { border: none; padding: 0; }

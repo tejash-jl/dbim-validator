@@ -16,7 +16,17 @@ let stopping = false;
 /** Store screenshot paths relative to the scan folder so the API can serve them. */
 function relativise(report: ScanReport, dir: string): ScanReport {
   const rel = (p?: string) => (p ? path.relative(dir, p) : undefined);
-  return { ...report, pages: report.pages.map((p) => ({ ...p, screenshotDesktop: rel(p.screenshotDesktop), screenshotMobile: rel(p.screenshotMobile) })) };
+  return {
+    ...report,
+    pages: report.pages.map((p) => ({
+      ...p,
+      screenshotDesktop: rel(p.screenshotDesktop),
+      screenshotMobile: rel(p.screenshotMobile),
+      screenshotFold: rel(p.screenshotFold),
+      screenshotHeader: rel(p.screenshotHeader),
+      screenshotFooter: rel(p.screenshotFooter),
+    })),
+  };
 }
 
 async function work(id: string, url: string, options: Parameters<typeof runScan>[1]) {
